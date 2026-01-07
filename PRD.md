@@ -200,11 +200,8 @@ PocketGuard uses a **four-tier confidence model**.
 - Protocol fee: 2%
 - User notified post-fact
 
-> Whitelist-only auto-sweep is mandatory.
-> 
-> 
-> Heuristics alone are insufficient and unsafe.
-> 
+> Whitelist-only auto-sweep is mandatory. 
+> Heuristics alone are insufficient and unsafe.> 
 
 ---
 
@@ -223,7 +220,7 @@ PocketGuard uses a **four-tier confidence model**.
 - Funds remain isolated
 - Hold tokens in pocket
 - Require explicit “Force Withdraw”
-- Protocol fee: 5%
+- Protocol fee: 8%
 
 ---
 
@@ -238,7 +235,7 @@ PocketGuard uses a **four-tier confidence model**.
 **Action**
 
 - Require explicit user confirmation
-- Protocol fee: 2%
+- Protocol fee: 3%
 - No auto-sweep
 
 ---

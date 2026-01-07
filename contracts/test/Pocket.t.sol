@@ -60,27 +60,53 @@ contract PocketTest is Test {
     /// Helpers
     /// -----------------------------------------------------------------------
 
-    function _signExec(
-        address _target,
-        bytes memory _data,
-        uint256 _nonce,
-        uint256 _expiry
-    ) internal view returns (bytes memory) {
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                address(pocket),
-                _target,
-                keccak256(_data),
-                _nonce,
-                _expiry,
-                block.chainid
-            )
-        );
+function _signExec(
+    address pocketAddr,
+    address target,
+    bytes memory data,
+    uint256 nonce,
+    uint256 expiry
+) internal view returns (bytes memory) {
+    // --- Exec typehash (must match Pocket.sol)
+    bytes32 EXEC_TYPEHASH = keccak256(
+        "Exec(address pocket,address target,bytes32 dataHash,uint256 nonce,uint256 expiry)"
+    );
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, digest);
-        return abi.encodePacked(r, s, v);
-    }
+    // --- Struct hash
+    bytes32 structHash = keccak256(
+        abi.encode(
+            EXEC_TYPEHASH,
+            pocketAddr,
+            target,
+            keccak256(data),
+            nonce,
+            expiry
+        )
+    );
+
+    // --- Domain separator (must match Pocket constructor)
+    bytes32 domainSeparator = keccak256(
+        abi.encode(
+            keccak256(
+                "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+            ),
+            keccak256(bytes("PocketGuard Pocket")),
+            keccak256(bytes("1")),
+            block.chainid,
+            pocketAddr
+        )
+    );
+
+    // --- Final digest
+    bytes32 digest = keccak256(
+        abi.encodePacked("\x19\x01", domainSeparator, structHash)
+    );
+
+    // --- Sign
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, digest);
+    return abi.encodePacked(r, s, v);
+}
+
 
     /// -----------------------------------------------------------------------
     /// Tests
@@ -95,7 +121,14 @@ contract PocketTest is Test {
         uint256 nonce = 1;
         uint256 expiry = block.timestamp + 1 hours;
 
-        bytes memory sig = _signExec(address(target), data, nonce, expiry);
+        bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
         pocket.exec(address(target), data, nonce, expiry, sig);
 
@@ -111,7 +144,14 @@ contract PocketTest is Test {
 
         uint256 nonce = 1;
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signExec(address(target), data, nonce, expiry);
+        bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
         pocket.exec(address(target), data, nonce, expiry, sig);
 
@@ -128,21 +168,17 @@ contract PocketTest is Test {
         uint256 nonce = 1;
         uint256 expiry = block.timestamp + 1 hours;
 
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                address(pocket),
-                address(target),
-                keccak256(data),
-                nonce,
-                expiry,
-                block.chainid
-            )
-        );
+        bytes memory badSig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
 
-        // sign with attacker key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xBEEF, digest);
-        bytes memory badSig = abi.encodePacked(r, s, v);
+// overwrite signer
+(uint8 v, bytes32 r, bytes32 s) = vm.sign(0xBEEF, vm.load(address(this), bytes32(0)));
+badSig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Pocket.InvalidSigner.selector);
         pocket.exec(address(target), data, nonce, expiry, badSig);
@@ -157,7 +193,14 @@ contract PocketTest is Test {
         uint256 nonce = 1;
         uint256 expiry = block.timestamp - 1;
 
-        bytes memory sig = _signExec(address(target), data, nonce, expiry);
+        bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
         vm.expectRevert(Pocket.SignatureExpired.selector);
         pocket.exec(address(target), data, nonce, expiry, sig);
@@ -171,7 +214,14 @@ function testNonceReplaySamePocketFails() public {
 
     uint256 nonce = 7;
     uint256 expiry = block.timestamp + 1 hours;
-    bytes memory sig = _signExec(address(target), data, nonce, expiry);
+    bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
     pocket.exec(address(target), data, nonce, expiry, sig);
 
@@ -188,7 +238,14 @@ function testSignatureReplayAcrossPocketsFails() public {
     uint256 nonce = 7;
     uint256 expiry = block.timestamp + 1 hours;
 
-    bytes memory sig = _signExec(address(target), data, nonce, expiry);
+    bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
     // Deploy a NEW pocket
     Pocket newPocket = new Pocket(controller, owner);
@@ -206,7 +263,13 @@ function testSignatureReplayAcrossPocketsFails() public {
 
         uint256 nonce = 1;
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signExec(address(reverter), data, nonce, expiry);
+        bytes memory sig = _signExec(
+    address(pocket),
+    address(reverter),
+    data,
+    nonce,
+    expiry
+);
 
         vm.expectRevert(Pocket.ExecutionFailed.selector);
         pocket.exec(address(reverter), data, nonce, expiry, sig);
@@ -220,7 +283,14 @@ function testSignatureReplayAcrossPocketsFails() public {
 
         uint256 nonce = 1;
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signExec(address(target), data, nonce, expiry);
+        bytes memory sig = _signExec(
+    address(pocket),
+    address(target),
+    data,
+    nonce,
+    expiry
+);
+
 
         vm.prank(attacker);
         vm.expectRevert(Pocket.NotController.selector);
@@ -232,4 +302,57 @@ function testSignatureReplayAcrossPocketsFails() public {
         vm.expectRevert(Pocket.NotController.selector);
         pocket.sweepERC20(address(0xDEAD), attacker, 1);
     }
+
+    function testPocketBurnDestroysIt() public {
+    uint256 nonce = 99;
+    uint256 expiry = block.timestamp + 1 hours;
+
+    bytes32 structHash = keccak256(
+        abi.encode(
+            keccak256("Burn(address pocket,uint256 nonce,uint256 expiry)"),
+            address(pocket),
+            nonce,
+            expiry
+        )
+    );
+
+    bytes32 domainSeparator = keccak256(
+        abi.encode(
+            keccak256(
+                "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+            ),
+            keccak256(bytes("PocketGuard Pocket")),
+            keccak256(bytes("1")),
+            block.chainid,
+            address(pocket)
+        )
+    );
+
+    bytes32 digest = keccak256(
+        abi.encodePacked("\x19\x01", domainSeparator, structHash)
+    );
+
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, digest);
+    bytes memory sig = abi.encodePacked(r, s, v);
+
+    pocket.burn(nonce, expiry, sig);
+
+    // burned flag is set
+assertTrue(pocket.burned());
+
+// execution is impossible
+vm.expectRevert(Pocket.PocketBurned.selector);
+pocket.exec(
+    address(0xDEAD),
+    "",
+    1,
+    block.timestamp + 1 hours,
+    ""
+);
+
+vm.expectRevert(Pocket.PocketBurned.selector);
+pocket.sweepERC20(address(0xDEAD), address(this), 1);
+
+}
+
 }

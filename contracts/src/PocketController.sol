@@ -72,6 +72,20 @@ contract PocketController {
     }
 
     /// -----------------------------------------------------------------------
+    /// Burn pocket (irreversible)
+    /// -----------------------------------------------------------------------
+
+    function burnPocket(
+        address payable pocket,
+        uint256 nonce,
+        uint256 expiry,
+        bytes calldata signature
+    ) external {
+        if (!validPocket[pocket]) revert InvalidPocket();
+        Pocket(pocket).burn(nonce, expiry, signature);
+        validPocket[pocket] = false;
+    }
+    /// -----------------------------------------------------------------------
     /// Execution routing
     /// -----------------------------------------------------------------------
 

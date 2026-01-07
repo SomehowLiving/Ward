@@ -1,11 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-contract Pocket {
+import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+/// @title Pocket
+/// @notice Single-use execution sandbox for risky on-chain interactions
+/// @dev Authority is granted only via EIP-712 signatures
+contract Pocket is EIP712 {
     using ECDSA for bytes32;
+
+    /// -----------------------------------------------------------------------
+    /// Constants
+    /// -----------------------------------------------------------------------
+
+    bytes32 private constant EXEC_TYPEHASH =
+        keccak256(
+            "Exec(address pocket,address target,bytes32 dataHash,uint256 nonce,uint256 expiry)"
+        );
+
+    bytes32 private constant BURN_TYPEHASH =
+        keccak256(
+            "Burn(address pocket,uint256 nonce,uint256 expiry)"
+        );
 
     /// -----------------------------------------------------------------------
     /// Immutable configuration
@@ -15,10 +32,12 @@ contract Pocket {
     address public immutable owner;
 
     /// -----------------------------------------------------------------------
-    /// Execution state
+    /// State
     /// -----------------------------------------------------------------------
 
     bool public used;
+    bool public burned;
+
     mapping(uint256 => bool) public usedNonces;
 
     /// -----------------------------------------------------------------------
@@ -27,6 +46,7 @@ contract Pocket {
 
     error NotController();
     error PocketAlreadyUsed();
+    error PocketBurned();
     error NonceUsed();
     error SignatureExpired();
     error InvalidSigner();
@@ -36,13 +56,15 @@ contract Pocket {
     /// Constructor
     /// -----------------------------------------------------------------------
 
-    constructor(address _controller, address _owner) {
+    constructor(address _controller, address _owner)
+        EIP712("PocketGuard Pocket", "1")
+    {
         controller = _controller;
         owner = _owner;
     }
 
     /// -----------------------------------------------------------------------
-    /// Core execution (single-use)
+    /// Single-use execution
     /// -----------------------------------------------------------------------
 
     function exec(
@@ -53,18 +75,25 @@ contract Pocket {
         bytes calldata signature
     ) external {
         if (msg.sender != controller) revert NotController();
+        if (burned) revert PocketBurned();
         if (used) revert PocketAlreadyUsed();
         if (usedNonces[nonce]) revert NonceUsed();
         if (block.timestamp > expiry) revert SignatureExpired();
 
-        bytes32 digest = _hashExec(
-            target,
-            data,
-            nonce,
-            expiry
+        bytes32 structHash = keccak256(
+            abi.encode(
+                EXEC_TYPEHASH,
+                address(this),
+                target,
+                keccak256(data),
+                nonce,
+                expiry
+            )
         );
 
+        bytes32 digest = _hashTypedDataV4(structHash);
         address signer = digest.recover(signature);
+
         if (signer != owner) revert InvalidSigner();
 
         usedNonces[nonce] = true;
@@ -75,7 +104,7 @@ contract Pocket {
     }
 
     /// -----------------------------------------------------------------------
-    /// Sweep assets (controller only)
+    /// Sweep ERC20 tokens (controller only)
     /// -----------------------------------------------------------------------
 
     function sweepERC20(
@@ -84,31 +113,41 @@ contract Pocket {
         uint256 amount
     ) external {
         if (msg.sender != controller) revert NotController();
+        if (burned) revert PocketBurned();
 
         IERC20(token).transfer(to, amount);
     }
 
     /// -----------------------------------------------------------------------
-    /// EIP-712 style hashing (minimal, no domain separator yet)
+    /// Burn pocket (irreversible)
     /// -----------------------------------------------------------------------
 
-    function _hashExec(
-        address target,
-        bytes calldata data,
+    function burn(
         uint256 nonce,
-        uint256 expiry
-    ) internal view returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                "\x19\x01",
+        uint256 expiry,
+        bytes calldata signature
+    ) external {
+        if (msg.sender != controller) revert NotController();
+        if (burned) revert PocketBurned();
+        if (usedNonces[nonce]) revert NonceUsed();
+        if (block.timestamp > expiry) revert SignatureExpired();
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                BURN_TYPEHASH,
                 address(this),
-                target,
-                keccak256(data),
                 nonce,
-                expiry,
-                block.chainid
+                expiry
             )
         );
+
+        bytes32 digest = _hashTypedDataV4(structHash);
+        address signer = digest.recover(signature);
+
+        if (signer != owner) revert InvalidSigner();
+
+        burned = true;
+        selfdestruct(payable(controller));
     }
 
     /// -----------------------------------------------------------------------
