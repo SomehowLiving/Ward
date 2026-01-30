@@ -1,10 +1,10 @@
-# PocketGuard — Product Requirements Document (PRD)
+# Ward — Product Requirements Document (PRD)
 
 ## 1. Product Summary
 
-**PocketGuard** is a wallet-layer security system that protects users from malicious on-chain interactions by executing risky actions inside **isolated, disposable smart-wallet “pockets”**.
+**Ward** is a wallet-layer security system that protects users from malicious on-chain interactions by executing risky actions inside **isolated, disposable smart-wallet “pockets”**.
 
-Instead of relying only on warnings, PocketGuard enforces **physical isolation at execution time**, ensuring that even if a user interacts with a malicious contract, losses are limited to a small, predefined pocket and never affect the main wallet.
+Instead of relying only on warnings, Ward enforces **physical isolation at execution time**, ensuring that even if a user interacts with a malicious contract, losses are limited to a small, predefined pocket and never affect the main wallet.
 
 ---
 
@@ -38,7 +38,7 @@ These tools fail when:
 > The only reliable way to prevent catastrophic loss is execution isolation, not better warnings.
 > 
 
-PocketGuard introduces **transaction-level isolation**:
+Ward introduces **transaction-level isolation**:
 
 - every risky interaction is executed from a disposable pocket,
 - pockets have limited funds and permissions,
@@ -76,7 +76,7 @@ PocketGuard introduces **transaction-level isolation**:
 ### Secondary
 
 - Casual users who occasionally claim airdrops
-- Wallet providers integrating PocketGuard as a safety layer
+- Wallet providers integrating Ward as a safety layer
 
 ---
 
@@ -100,7 +100,7 @@ PocketGuard introduces **transaction-level isolation**:
 ### Setup (one-time)
 
 1. User connects wallet
-2. User initializes PocketGuard
+2. User initializes Ward
 3. User deposits small amount (e.g. $20–$50)
 4. System creates N pre-funded pockets
 5. Dashboard shows available pockets
@@ -108,7 +108,7 @@ PocketGuard introduces **transaction-level isolation**:
 ### Risky Interaction
 
 1. User clicks “Claim Airdrop”
-2. PocketGuard analyzes target
+2. Ward analyzes target
 3. System routes interaction to a pocket
 4. User signs an off-chain intent
 5. Relayer executes transaction
@@ -136,6 +136,13 @@ PocketGuard introduces **transaction-level isolation**:
 - Max pocket value: **0.05 ETH equivalent**
 - Auto-refill prompt when controller balance < **0.01 ETH**
 
+## Chain Configuration (Avalanche C-Chain)
+| Parameter             | Value     | Rationale                               |
+| --------------------- | --------- | --------------------------------------- |
+| Pocket gas reserve    | 0.01 AVAX | Covers ~10 transactions at 50 nAVAX/gas |
+| Max pocket value      | 0.5 AVAX  | ~\$20 limit per interaction             |
+| Auto-refill threshold | 0.1 AVAX  | Prompt when <4 pockets can be funded    |
+
 ### Rationale
 
 - Avoids wasted capital
@@ -161,7 +168,7 @@ PocketGuard introduces **transaction-level isolation**:
 
 ## 9. Risk Classification Model (Authoritative Policy)
 
-PocketGuard uses a **four-tier confidence model**.
+Ward uses a **four-tier confidence model**.
 
 ### Tier 1 — Explicitly Malicious
 
@@ -408,10 +415,10 @@ This is non-negotiable.
 
 - Social recovery for pockets
 - Pocket burner (destroy pockets holding toxic assets)
-- Relayer refund buffer (staked gas insurance)
-- Multiple relayers
-- Advanced simulation heuristics
-- Wallet extension integration
+- Relayer refund buffer (staked gas insurance for failed transactions)
+- Multiple relayers (decentralize execution)
+- Advanced simulation heuristics (improve detection accuracy)
+- Wallet extension integration (MetaMask Snap, Core Wallet plugin)
 
 ---
 
@@ -442,7 +449,7 @@ This is non-negotiable.
 
 ## 17. One-Sentence Product Definition (for judges)
 
-> PocketGuard prevents catastrophic wallet drains by executing risky on-chain actions inside disposable smart-wallet pockets, limiting loss by design instead of relying on warnings.
+> Ward prevents catastrophic wallet drains by executing risky on-chain actions inside disposable smart-wallet pockets, limiting loss by design instead of relying on warnings.
 > 
 
 ---

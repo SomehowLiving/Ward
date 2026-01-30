@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the **non-negotiable engineering rules** for PocketGuard’s smart contracts.
+This document defines the **non-negotiable engineering rules** for Ward’s smart contracts.
 
 It exists to:
 
@@ -74,7 +74,7 @@ Contracts must be implemented and validated in **this exact order**:
 
 `Pocket` is a **single-use isolation wallet** used to execute exactly one risky action.
 
-It is the **core security boundary** of PocketGuard.
+It is the **core security boundary** of Ward.
 
 ---
 
@@ -287,6 +287,6 @@ It is intentionally **dumb and powerless**.
 
 ## One-Sentence Summary
 
-> PocketGuard replaces trust in user caution with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
+> Ward replaces trust in user caution with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
 
 ---

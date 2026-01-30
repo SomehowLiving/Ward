@@ -1,8 +1,8 @@
-# ARCHITECTURE.md — PocketGuard
+# ARCHITECTURE.md — Ward
 
 ## Purpose of this Document
 
-This document describes **how PocketGuard works end-to-end**, at both:
+This document describes **how Ward works end-to-end**, at both:
 
 * **High level** (mental model, components, trust boundaries)
 * **Low level** (exact flows, contracts, signatures, and state transitions)
@@ -18,7 +18,7 @@ It answers:
 
 ## 1. System Overview (One-Paragraph Summary)
 
-PocketGuard is an execution-isolation layer for EVM wallets.
+Ward is an execution-isolation layer for EVM wallets.
 Risky on-chain interactions are executed inside **single-use smart-wallet pockets** that are created on demand, funded with a capped amount, and authorized via explicit user signatures.
 
 The main wallet never executes risky logic, never grants approvals, and never holds temporary permissions. Loss, if any, is confined to the pocket.
@@ -428,7 +428,7 @@ Any change violating these is a **security regression**.
 
 ## 14. Relationship to Other Docs
 
-* `README.md` — what PocketGuard is
+* `README.md` — what Ward is
 * `SECURITY.md` — threat model and guarantees
 * `PRD.md` — product rules and tiers
 * `ARCHITECTURE.md` — **this document**
@@ -437,6 +437,6 @@ Any change violating these is a **security regression**.
 
 ## 15. One-Sentence Architecture Summary
 
-> PocketGuard replaces trust in user behavior with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
+> Ward replaces trust in user behavior with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
 
 ---

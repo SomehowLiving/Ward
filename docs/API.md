@@ -1,4 +1,4 @@
-# PocketGuard — Required APIs
+# Ward — Required APIs
 
 ## High-level API categories
 

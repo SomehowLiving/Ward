@@ -1,8 +1,8 @@
-# CONTRACTS.md — PocketGuard Smart Contract Architecture
+# CONTRACTS.md — Ward Smart Contract Architecture
 
 ## Purpose of This Document
 
-This document explains **each on-chain contract in PocketGuard**, including:
+This document explains **each on-chain contract in Ward**, including:
 
 * What the contract is responsible for
 * What it explicitly does *not* do
@@ -13,13 +13,13 @@ This document explains **each on-chain contract in PocketGuard**, including:
   * the **user wallet**
 * The security guarantees each contract enforces
 
-This is the **authoritative reference** for PocketGuard’s on-chain behavior.
+This is the **authoritative reference** for Ward’s on-chain behavior.
 
 ---
 
 ## High-Level Architecture Recap
 
-PocketGuard separates concerns strictly:
+Ward separates concerns strictly:
 
 ```
 User (EOA)
@@ -59,7 +59,7 @@ Untrusted contract / token
 
 `Pocket` is a **single-use smart wallet** that executes **exactly one risky action** on behalf of a user.
 
-It is the **core security boundary** of PocketGuard.
+It is the **core security boundary** of Ward.
 
 ---
 
@@ -335,7 +335,7 @@ Deploys a pocket with:
 
 ## Threat Model & Non-Goals
 
-PocketGuard contracts are designed to defend against:
+Ward contracts are designed to defend against:
 
 * Malicious contract execution (approval drainers, honeypots)
 * Accidental interaction with scam airdrops
@@ -343,7 +343,7 @@ PocketGuard contracts are designed to defend against:
 * Relayer or backend compromise
 * User error during high-risk interactions
 
-PocketGuard contracts do NOT attempt to defend against:
+Ward contracts do NOT attempt to defend against:
 
 * Price volatility or market risk
 * Token value misrepresentation
@@ -381,14 +381,14 @@ Any change violating these invariants is a **security regression**.
 * User gas cost: **zero** (relayer-paid)
 * Relayer cost: reimbursed via controller logic
 
-PocketGuard is designed for L2s and high-throughput chains where
+Ward is designed for L2s and high-throughput chains where
 single-use isolation is economically viable.
 
 ---
 
 ## Upgrade & Governance Policy
 
-PocketGuard contracts are deployed as **non-upgradeable** in v1.
+Ward contracts are deployed as **non-upgradeable** in v1.
 
 Reasons:
 
@@ -440,10 +440,10 @@ Final authority always lies with the user signature and on-chain enforcement.
 
 ## Final Summary
 
-> PocketGuard’s contracts enforce **execution isolation by construction**.
+> Ward’s contracts enforce **execution isolation by construction**.
 > All risky logic is executed inside disposable pockets, while authority, fees, and lifecycle rules are enforced on-chain without trusting the backend or relayer.
 
-> PocketGuard replaces trust in user caution with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
+> Ward replaces trust in user caution with enforced execution isolation, ensuring that even successful attacks cannot propagate beyond a disposable pocket.
 
 This contract architecture is:
 

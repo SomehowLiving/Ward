@@ -1,8 +1,8 @@
-# INTERFACES.md — PocketGuard
+# INTERFACES.md — Ward
 
 ## Purpose
 
-This document defines the **canonical on-chain and off-chain interfaces** for PocketGuard.
+This document defines the **canonical on-chain and off-chain interfaces** for Ward.
 
 It specifies:
 
@@ -192,7 +192,7 @@ struct ExecutionIntent {
 
 ```solidity
 EIP712Domain {
-  name: "PocketGuard",
+  name: "Ward",
   version: "1",
   chainId: <chainId>,
   verifyingContract: <PocketController>

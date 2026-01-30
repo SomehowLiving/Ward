@@ -1,8 +1,8 @@
-# PocketGuard
+# Ward
 
-**PocketGuard** is a wallet-layer security system that prevents catastrophic wallet loss by executing risky on-chain interactions inside **isolated, disposable smart-wallet pockets**.
+**Ward** is a wallet-layer security system that prevents catastrophic wallet loss by executing risky on-chain interactions inside **isolated, disposable smart-wallet pockets**.
 
-Instead of relying on warnings or detection alone, PocketGuard enforces **execution isolation** so that even if a user interacts with a malicious contract, losses are **contained by design** and never propagate to the main wallet.
+Instead of relying on warnings or detection alone, Ward enforces **execution isolation** so that even if a user interacts with a malicious contract, losses are **contained by design** and never propagate to the main wallet.
 
 ---
 
@@ -29,7 +29,7 @@ These fail when users ignore alerts or when malicious logic executes faster than
 
 ## The core primitive: Execution Isolation
 
-PocketGuard introduces a new security primitive:
+Ward introduces a new security primitive:
 
 > **Every risky on-chain action is executed from a disposable, single-use smart wallet instead of the main wallet.**
 
@@ -54,7 +54,7 @@ The main wallet:
 1. **User initiates a risky action**
    Example: claiming an airdrop or interacting with an unknown contract.
 
-2. **PocketGuard analyzes the target**
+2. **Ward analyzes the target**
    Backend performs static checks and simulations to classify risk.
 
 3. **A pocket is created on demand**
@@ -81,7 +81,7 @@ The main wallet:
 
 ## How does the flow look like ?
 
-### PocketGuard Execution Isolation Flow
+### Ward Execution Isolation Flow
 *The main wallet never executes risky calls — it only signs a one-time intent.*
 
 ```markdown
@@ -99,7 +99,7 @@ The main wallet:
                                            └────────────────────┘
 ```
 
-### PocketGuard Trust Boundary Model
+### Ward Trust Boundary Model
 *Risky execution is physically separated from the user’s wallet by a disposable smart-wallet boundary.*
 ```markdown
 ┌───────────────────────────────────────────┐
@@ -135,9 +135,9 @@ The main wallet:
 | Browser warnings   | Wallet drained                        |
 | Signature previews | Wallet drained                        |
 | Static scanners    | Wallet drained                        |
-| **PocketGuard**    | **Loss capped to pocket**             |
+| **Ward**    | **Loss capped to pocket**             |
 
-PocketGuard does not rely on users making the “right” decision.
+Ward does not rely on users making the “right” decision.
 It **removes catastrophic failure modes entirely**.
 
 ---
@@ -173,7 +173,7 @@ The demo intentionally walks into a scam.
 
 ### Demo scenario
 
-1. User claims a **malicious airdrop** using PocketGuard.
+1. User claims a **malicious airdrop** using Ward.
 2. The malicious contract drains the executing wallet.
 3. That wallet is a **pocket**, not the main wallet.
 4. The main wallet balance remains unchanged.
@@ -182,20 +182,20 @@ The demo intentionally walks into a scam.
 
 * Malicious execution **can be survived by design**
 * Wallet drains become **bounded losses**, not catastrophic failures
-* PocketGuard protects users **even when they make mistakes**
+* Ward protects users **even when they make mistakes**
 
 This is the core value proposition.
 
 ---
 
-## What PocketGuard does *not* claim
+## What Ward does *not* claim
 
 * It does not guarantee tokens are valuable.
 * It does not promise perfect scam detection.
 * It does not recover funds from compromised pockets.
 * It does not protect assets after they are moved to the main wallet.
 
-PocketGuard is honest about its scope:
+Ward is honest about its scope:
 
 > **It prevents catastrophic loss — not all loss.**
 
@@ -203,6 +203,6 @@ PocketGuard is honest about its scope:
 
 ## In One-sentence
 
-> **PocketGuard turns every risky on-chain action into a disposable, loss-capped execution environment, making wallet drains structurally impossible.**
+> **Ward turns every risky on-chain action into a disposable, loss-capped execution environment, making wallet drains structurally impossible.**
 
 ---

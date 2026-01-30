@@ -3,12 +3,17 @@ pragma solidity ^0.8.20;
 
 import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
+// import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+
 /// @title Pocket
 /// @notice Single-use execution sandbox for risky on-chain interactions
 /// @dev Authority is granted only via EIP-712 signatures
 contract Pocket is EIP712 {
     using ECDSA for bytes32;
+    using SafeERC20 for IERC20;
+
 
     /// -----------------------------------------------------------------------
     /// Constants
@@ -57,7 +62,7 @@ contract Pocket is EIP712 {
     /// -----------------------------------------------------------------------
 
     constructor(address _controller, address _owner)
-        EIP712("PocketGuard Pocket", "1")
+        EIP712("Ward Pocket", "1")
     {
         controller = _controller;
         owner = _owner;
@@ -115,7 +120,9 @@ contract Pocket is EIP712 {
         if (msg.sender != controller) revert NotController();
         if (burned) revert PocketBurned();
 
-        IERC20(token).transfer(to, amount);
+        // IERC20(token).transfer(to, amount);
+        IERC20(token).safeTransfer(to, amount);
+
     }
 
     /// -----------------------------------------------------------------------

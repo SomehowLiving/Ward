@@ -1,11 +1,11 @@
-# SECURITY.md — PocketGuard
+# SECURITY.md — Ward
 
 ## Overview
 
-PocketGuard is designed to **prevent catastrophic wallet loss** by isolating risky on-chain interactions inside disposable smart-wallet “pockets.”
-This document describes PocketGuard’s **security model, trust assumptions, threat boundaries, attacker models, mitigations, and explicit non-guarantees**.
+Ward is designed to **prevent catastrophic wallet loss** by isolating risky on-chain interactions inside disposable smart-wallet “pockets.”
+This document describes Ward’s **security model, trust assumptions, threat boundaries, attacker models, mitigations, and explicit non-guarantees**.
 
-This is not a promise of perfect safety. It is a clear statement of **what PocketGuard protects, how it protects it, and where responsibility shifts to the user**.
+This is not a promise of perfect safety. It is a clear statement of **what Ward protects, how it protects it, and where responsibility shifts to the user**.
 
 ---
 
@@ -25,7 +25,7 @@ Loss is **contained by design**, not prevented by heuristics alone.
 
 ## Security Goals
 
-PocketGuard aims to guarantee:
+Ward aims to guarantee:
 
 1. **Main wallet isolation**
 
@@ -41,13 +41,13 @@ PocketGuard aims to guarantee:
    * Every execution requires a user signature with strict scope.
 5. **Non-custodial operation**
 
-   * Neither PocketGuard nor relayers can unilaterally move user funds.
+   * Neither Ward nor relayers can unilaterally move user funds.
 
 ---
 
 ## Explicit Non-Goals
 
-PocketGuard does **not** guarantee:
+Ward does **not** guarantee:
 
 * That users will never lose money (pocket funds can be lost).
 * That a token has real-world or USD value.
@@ -80,7 +80,7 @@ Once assets are swept to the main wallet, **standard wallet risk applies**.
 
 ## User-Visible Failure Modes & Asset Containment
 
-PocketGuard is designed so that **loss is visible, bounded, and non-propagating**.
+Ward is designed so that **loss is visible, bounded, and non-propagating**.
 Users may realize an interaction was malicious at different stages. All cases are explicitly handled.
 
 ### Case A — Immediate Pocket Drain
@@ -127,7 +127,7 @@ Users may realize an interaction was malicious at different stages. All cases ar
 
 * This is **not a wallet drain**
 * This is a *toxic asset*
-* PocketGuard’s responsibility is **containment**, not asset redemption
+* Ward’s responsibility is **containment**, not asset redemption
 
 **Policy**
 
@@ -153,7 +153,7 @@ Users may realize an interaction was malicious at different stages. All cases ar
 
 ## Asset Movement Policy (Pocket → Main Wallet)
 
-PocketGuard supports three asset outcomes. At least two must always be available.
+Ward supports three asset outcomes. At least two must always be available.
 
 ### 1. Auto-Sweep (Explicitly Safe Only)
 
@@ -177,13 +177,13 @@ This behavior is intentional and honest.
 
 ---
 
-## Why PocketGuard Does NOT Auto-Transfer by Default
+## Why Ward Does NOT Auto-Transfer by Default
 
 Automatically sweeping all received assets would:
 
 * Introduce honeypots into the main wallet
 * Allow griefing via malicious ERC20 hooks
-* Shift blame to PocketGuard for asset toxicity
+* Shift blame to Ward for asset toxicity
 
 **Security rule**
 
@@ -291,7 +291,7 @@ This enforces an upper bound on loss per interaction.
 
 ## Risk Classification & Automation Safety
 
-PocketGuard uses a **four-tier risk model**.
+Ward uses a **four-tier risk model**.
 Automation is deliberately conservative.
 
 ### Auto-Sweep (Tier 2) Safety Rules
@@ -427,8 +427,8 @@ This prevents fee theft and relayer abuse.
 
 ## Known Limitations
 
-* PocketGuard cannot recover funds already drained from a pocket.
-* PocketGuard does not guarantee token value or liquidity.
+* Ward cannot recover funds already drained from a pocket.
+* Ward does not guarantee token value or liquidity.
 * Some stateful scams may evade simulation.
 * Gas price spikes can reduce effective pocket coverage.
 * NFT-specific attacks may require manual pocket burning.
@@ -453,10 +453,10 @@ We commit to:
 
 ---
 
-> PocketGuard does not try to make users smarter.
+> Ward does not try to make users smarter.
 > It makes mistakes survivable.
 
-By enforcing **execution isolation, bounded loss, and explicit consent**, PocketGuard shifts crypto security from *best-effort detection* to *guaranteed containment*.
+By enforcing **execution isolation, bounded loss, and explicit consent**, Ward shifts crypto security from *best-effort detection* to *guaranteed containment*.
 
 ---
 

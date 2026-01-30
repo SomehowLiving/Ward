@@ -100,7 +100,7 @@ function _signExec(
             keccak256(
                 "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
             ),
-            keccak256(bytes("PocketGuard Pocket")),
+            keccak256(bytes("Ward Pocket")),
             keccak256(bytes("1")),
             block.chainid,
             pocket

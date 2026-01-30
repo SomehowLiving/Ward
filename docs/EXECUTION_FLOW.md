@@ -1,15 +1,15 @@
-# EXECUTION_FLOW.md — PocketGuard
+# EXECUTION_FLOW.md — Ward
 
 ## Purpose of This Document
 
-This document provides a **complete end-to-end execution walkthrough** of PocketGuard.
+This document provides a **complete end-to-end execution walkthrough** of Ward.
 
 It explains, in order:
 
 1. What the **user experiences**
 2. What happens in the **backend (off-chain)**
 3. What happens **on-chain (contracts)**
-4. How **failures are handled** and what PocketGuard **guarantees by design**
+4. How **failures are handled** and what Ward **guarantees by design**
 
 This is the authoritative reference for understanding **how a risky interaction is safely executed**.
 
@@ -37,11 +37,11 @@ Example:
 * User visits an airdrop site
 * User clicks **“Claim”**
 
-PocketGuard frontend intercepts the action and displays:
+Ward frontend intercepts the action and displays:
 
 * Target contract
 * Risk status (pending)
-* “Claim safely with PocketGuard”
+* “Claim safely with Ward”
 
 No blockchain transaction occurs yet.
 
@@ -332,7 +332,7 @@ This is an **expected and acceptable failure mode**.
 
 ## 5. System Guarantees (By Design)
 
-PocketGuard **guarantees**:
+Ward **guarantees**:
 
 * Main wallet never executes risky code
 * Main wallet never grants approvals
@@ -340,7 +340,7 @@ PocketGuard **guarantees**:
 * Authority is always explicit and scoped
 * Loss is bounded and predictable
 
-PocketGuard **does not guarantee**:
+Ward **does not guarantee**:
 
 * That tokens have value
 * That scams never occur
@@ -348,7 +348,7 @@ PocketGuard **does not guarantee**:
 
 ---
 
-** PocketGuard executes risky on-chain actions inside disposable, single-use pockets, ensuring that even successful attacks are physically unable to reach the user’s main wallet. **
+** Ward executes risky on-chain actions inside disposable, single-use pockets, ensuring that even successful attacks are physically unable to reach the user’s main wallet. **
 
 ---
 
