@@ -58,7 +58,8 @@ The main wallet:
    Backend performs static checks and simulations to classify risk.
 
 3. **A pocket is created on demand**
-   A disposable smart wallet is deployed and temporarily funded with a small gas reserve.
+   A disposable smart wallet is deployed and funded with **0.005 ETH** (~$12). 
+   Each pocket is capped at **0.05 ETH** equivalent—your worst-case loss per interaction.
 
 4. **User signs an intent (no gas)**
    The user signs a message authorizing:
@@ -76,6 +77,18 @@ The main wallet:
    * If the contract is safe: assets can be swept to the main wallet.
    * If malicious: the pocket is drained or burned.
    * In all cases, the main wallet remains untouched.
+
+---
+
+### How Ward decides what to do
+
+After a pocket executes, Ward classifies the result into one of three categories:
+
+- **Safe** (e.g., USDC, verified airdrops): **auto-transferred** to your main wallet
+- **Uncertain** (unverified code, simulation warnings): **held in pocket** until you manually withdraw
+- **Malicious** (honeypot, drain attempt): **pocket destroyed**, funds abandoned
+
+Ward never moves assets without a safety decision—automatic or user-confirmed.
 
 ---
 
@@ -124,6 +137,14 @@ The main wallet:
 │   Airdrops • DeFi • Unknown Contracts     │
 └───────────────────────────────────────────┘
 ```
+---
+
+⚠️ **If Ward marks a token as risky, withdrawal requires explicit confirmation:**
+- You see exactly why it failed (e.g., "Transfer simulation reverted")
+- You must check: *"I understand this token may be malicious"*
+- **30-second cooldown** timer prevents impulsive clicks
+
+No surprises. No blame-shifting.
 
 ---
 ## Why is this safer than existing approaches?
@@ -158,12 +179,25 @@ This is fundamentally safer than:
 
 ### Gasless UX without custody
 
-* Users sign messages, not transactions.
-* Relayers pay gas.
-* Fees are enforced on-chain by the controller.
-* Relayers never custody user assets.
+* Users sign **messages**, not transactions (no ETH needed).
+* Relayers pay gas upfront and are reimbursed from a separate pool.
+* Ward's controller enforces fees **on-chain**, sending them directly to the protocol treasury.
+* Relayers **never touch your tokens**—they only execute transactions.
+
+You never need ETH in your main wallet to claim airdrops.
 
 Security is preserved without UX friction.
+
+---
+
+### Fees
+
+Ward charges **2–8%** on successful transfers, depending on risk:
+- **Safe tokens**: 2% (auto-sweep)
+- **Provisional tokens**: 3% (user-confirmed)
+- **Risky tokens**: 8% (Force Withdraw)
+
+No fees if a pocket is drained. Fees are enforced on-chain; relayers never custody your assets.
 
 ---
 
@@ -171,12 +205,20 @@ Security is preserved without UX friction.
 
 The demo intentionally walks into a scam.
 
-### Demo scenario
+### Demo scenario (two cases)
 
+**Case 1: Drain Attack**
 1. User claims a **malicious airdrop** using Ward.
-2. The malicious contract drains the executing wallet.
-3. That wallet is a **pocket**, not the main wallet.
-4. The main wallet balance remains unchanged.
+2. The contract attempts to drain the executing wallet.
+3. That wallet is a **pocket** (holds 0.005 ETH).
+4. Pocket drained. Main wallet: untouched. Loss: capped.
+
+**Case 2: Honeypot Token**
+1. User receives a token that looks valuable but blocks all sales.
+2. Token stays **isolated in pocket**.
+3. Main wallet never exposed. User chooses to abandon pocket.
+
+Both prove **containment by design**.
 
 ### What this proves
 
