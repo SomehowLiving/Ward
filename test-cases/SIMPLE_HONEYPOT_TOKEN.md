@@ -338,7 +338,90 @@ cast balance $POCKET_ADDRESS --rpc-url $RPC_URL
 
 ---
 
-## 7. Security Guarantees Proven
+
+## 7. Token Transfer Restrictions (Honeypot Behavior)
+
+This section documents **expected failures** when attempting direct ERC-20 transfers from externally owned accounts (EOAs).
+
+---
+
+### 7.1 Direct Transfer to a Regular Address (Expected Failure)
+
+```bash
+cast send $TOKEN_ADDRESS \
+  "transfer(address,uint256)" \
+  $BUYER_ADDRESS \
+  1 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Observed Error**
+
+```
+Error: Failed to estimate gas: server returned an error response:
+error code 3: execution reverted: HONEYPOT: Cannot transfer
+Error("HONEYPOT: Cannot transfer")
+```
+
+**Explanation**
+
+* The token explicitly blocks `transfer()` calls.
+* This confirms the token is a **honeypot-style ERC20**.
+* Tokens cannot be moved via standard ERC20 transfer semantics.
+
+---
+
+### 7.2 Transfer to Zero Address (Standard ERC20 Guard)
+
+```bash
+cast send $TOKEN_ADDRESS \
+  "transfer(address,uint256)" \
+  0x0000000000000000000000000000000000000000 \
+  1 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Observed Error**
+
+```
+Error: Failed to estimate gas: server returned an error response:
+error code 3: execution reverted: ERC20: transfer to the zero address
+Error("ERC20: transfer to the zero address")
+```
+
+**Explanation**
+
+* This revert comes from the standard ERC20 zero-address guard.
+* It is **independent** of the honeypot restriction.
+* Confirms ERC20 compliance checks are still enforced.
+
+---
+
+## 8. Security Implications
+
+These failures demonstrate the intended design:
+
+* `transfer()` is **globally disabled**
+* Tokens can only be acquired via:
+
+  * `claimAirdrop()`
+  * controlled execution paths (e.g., via Pocket + Controller)
+* Tokens held by a burned pocket:
+
+  * **cannot be transferred**
+  * **cannot be swept**
+  * **cannot be recovered**
+
+This validates that:
+
+* Honeypot restrictions are effective
+* Pocket burn + controller invalidation permanently isolates toxic assets
+* No fallback ERC20 path exists to bypass protocol controls
+
+
+### Security Guarantees Proven
 
 * Tokens can be **received but never moved**
 * Approvals do not bypass restrictions
@@ -347,6 +430,16 @@ cast balance $POCKET_ADDRESS --rpc-url $RPC_URL
 * Sweeping toxic assets fails deterministically
 * Assets remain permanently isolated
 * Burning the pocket is the only cleanup path
+
+---
+
+---
+
+## 9. Key Takeaway
+
+> **If `transfer()` succeeds, the isolation model is broken.**
+
+These reverts are **expected, correct, and required** for protocol safety.
 
 ---
 

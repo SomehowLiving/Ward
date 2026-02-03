@@ -58,7 +58,7 @@ async function signClaim() {
   console.log(`  "executeFromPocket(address,address,bytes,uint256,uint256,bytes)" \\`);
   console.log(`  $POCKET_ADDRESS \\`);
   console.log(`  $TOKEN_ADDRESS \\`);
-  console.log(`  0x4e71d92d \\`);
+  console.log(`  0x5b88349d \\`);
   console.log(`  1 \\`);
   console.log(`  $EXPIRY \\`);
   console.log(`  $SIGNATURE \\`);

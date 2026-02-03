@@ -332,6 +332,30 @@ cast send $CONTROLLER_ADDRESS \
 InvalidPocket
 ```
 
+### FIND THE AMOUNT OF TOKEN:
+
+```bash
+
+AMOUNT=$(cast call $TOKEN_ADDRESS \
+  "balanceOf(address)(uint256)" \
+  $POCKET_ADDRESS \
+  --rpc-url $RPC_URL | cut -d' ' -f1)
+
+```
+
+> *IF YOU WANT TO SWEEP ALL*:
+```bash
+cast send $CONTROLLER_ADDRESS \
+  "sweep(address,address,address,uint256,uint8)" \
+  $POCKET_ADDRESS \
+  $TOKEN_ADDRESS \
+  $WALLET_ADDRESS \
+  $AMOUNT \
+  0 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+
+```
 ---
 
 ### 8.4: Pocket ETH Balance Is Zero
