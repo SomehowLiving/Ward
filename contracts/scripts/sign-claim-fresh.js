@@ -14,7 +14,6 @@ async function signClaim() {
   }
 
   const data = '0x5b88349d'; // claimAirdrop()
-  // const data = '0x4e71d92d'; // claimAirdrop() 
   const nonce = 1;
   const expiry = Math.floor(Date.now() / 1000) + 3600; // Fresh 1 hr from now
 

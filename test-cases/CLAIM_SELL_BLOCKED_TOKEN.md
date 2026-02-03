@@ -248,5 +248,199 @@ This token demonstrates a **realistic conditional honeypot**:
 This makes static detection difficult and motivates **isolated execution environments** like WARD pockets.
 
 ---
+Good test choice. This token is **much closer to real-world scam behavior**.
+Below is a **clear, deterministic test plan** you can run with **EOA only** and then **with WARD pockets**, including **expected outcomes** and **what each test proves**.
 
-If you want, next I can write **Part B: Pocket-based interaction with CSBT** or **Part C: Why WARD prevents damage here**.
+I’ll structure this exactly like something you can paste into a README or test checklist.
+
+---
+
+# Testing `ClaimSellBlockedToken` (CSBT)
+
+## Token properties recap (important for tests)
+
+* Claiming **marks the wallet**
+* Marked wallets:
+
+  * ✅ can transfer to normal wallets
+  * ❌ cannot sell to the DEX pair
+* Owner is always exempt
+* This simulates *“everything works until you try to sell”*
+
+---
+
+## Setup
+
+### 0. Deploy token
+
+Use a dummy DEX pair (can be any address):
+
+```bash
+export DEX_PAIR=0x0000000000000000000000000000000000000001
+```
+
+Deploy:
+
+```bash
+forge create ClaimSellBlockedToken \
+  --constructor-args $DEX_PAIR \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+Save:
+
+```bash
+export TOKEN_ADDRESS=0x...
+```
+
+---
+
+## PART B — Testing with WARD Pocket (core value)
+
+### 1. Create pocket
+
+```bash
+cast send $CONTROLLER_ADDRESS \
+  "createPocket(address,uint256)" \
+  $WALLET_ADDRESS \
+  1 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+Save pocket address.
+
+---
+
+### 2. Claim via pocket (safe execution)
+
+Generate signature for:
+
+```solidity
+claimAirdrop()
+```
+
+Then execute:
+
+```bash
+cast send $CONTROLLER_ADDRESS \
+  "executeFromPocket(address,address,bytes,uint256,uint256,bytes)" \
+  $POCKET_ADDRESS \
+  $TOKEN_ADDRESS \
+  0x<claimAirdrop selector> \
+  1 \
+  $EXPIRY \
+  $SIGNATURE \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Expected**
+
+* ✅ Success
+* `claimed[POCKET_ADDRESS] == true`
+* Tokens minted to **pocket**, not wallet
+
+---
+
+### 3. Verify wallet is NOT marked
+
+```bash
+cast call $TOKEN_ADDRESS \
+  "claimed(address)(bool)" \
+  $WALLET_ADDRESS
+```
+
+**Expected**
+
+```
+false
+```
+
+This is **critical**:
+
+* The wallet never triggered the honeypot
+* Only the pocket is poisoned
+
+---
+
+### 4. Attempt sell from pocket (expected failure)
+
+```bash
+cast send $CONTROLLER_ADDRESS \
+  "sweep(address,address,address,uint256,uint8)" \
+  $POCKET_ADDRESS \
+  $TOKEN_ADDRESS \
+  $DEX_PAIR \
+  1 \
+  0 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Expected**
+
+```
+SELL DISABLED: claimed wallet
+```
+
+---
+
+### 5. Wallet can still sell its own tokens
+
+If the wallet received CSBT from someone else:
+
+```bash
+cast send $TOKEN_ADDRESS \
+  "transfer(address,uint256)" \
+  $DEX_PAIR \
+  1 \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Expected**
+
+* ✅ Success
+
+WARD successfully **prevented wallet contamination**.
+
+---
+
+## PART C — Burn pocket (cleanup)
+
+```bash
+cast send $CONTROLLER_ADDRESS \
+  "burnPocket(address,uint256,uint256,bytes)" \
+  $POCKET_ADDRESS \
+  $NONCE \
+  $EXPIRY \
+  $BURN_SIGNATURE \
+  --rpc-url $RPC_URL \
+  --private-key $PRIVATE_KEY
+```
+
+**Expected**
+
+* Pocket invalidated
+* ETH reclaimed
+* Claimed tokens permanently isolated
+
+---
+
+## What this test proves (important)
+
+This token demonstrates a **next-level honeypot**, and your tests show:
+
+* The token behaves normally **until a claim**
+* Selling fails **only for claimed wallets**
+* Ward pockets absorb the poison
+* The main wallet remains clean
+* Loss is contained and final
+
+---
+
+## One-line summary for README
+
+> **ClaimSellBlockedToken simulates modern honeypots that only block selling after an airdrop claim; WARD safely contains the poisoned execution inside a pocket, preventing wallet-level contamination.**
