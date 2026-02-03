@@ -1,4 +1,4 @@
-# PocketGuard — End-to-End Flow (As Implemented)
+# PocketGuard — End-to-End Flow
 
 This system has **three roles**:
 
