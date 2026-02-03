@@ -18,7 +18,7 @@ import fs from "fs";
 const FACTORY = "0x2D09533dBfD323A16c38C63b11C8004650dF824B";
 const CONTROLLER = "0xC72d22cF0DD6fd5571d47EEbe5fCd87B2478bFD7";
 const OWNER = "0x14e0D556fFe746BC5ab12902423bDa63DeA08Bf9";
-const SALT_UINT = 1770053143; // Example salt value
+const SALT_UINT = 1770092533; // Example salt value
 
 console.log("\n=== COMPUTE POCKET ADDRESS ===");
 

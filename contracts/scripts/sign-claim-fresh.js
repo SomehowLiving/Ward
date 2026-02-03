@@ -5,8 +5,16 @@ async function signClaim() {
   const signer = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
 
   const pocket = process.env.POCKET_ADDRESS;
+  if (!ethers.isAddress(pocket)) {
+    throw new Error(`Invalid POCKET_ADDRESS: ${pocket}`);
+  }
   const target = process.env.TOKEN_ADDRESS;
-  const data = '0x4e71d92d'; // claimAirdrop() 
+  if (!ethers.isAddress(target)) {
+    throw new Error(`Invalid TOKEN_ADDRESS: ${target}`);
+  }
+
+  const data = '0x5b88349d'; // claimAirdrop()
+  // const data = '0x4e71d92d'; // claimAirdrop() 
   const nonce = 1;
   const expiry = Math.floor(Date.now() / 1000) + 3600; // Fresh 1 hr from now
 
@@ -59,3 +67,20 @@ async function signClaim() {
 }
 
 signClaim().catch(console.error);
+
+// WORKS NO MATTER WHAT:
+
+// cast send \
+//   $CONTROLLER_ADDRESS \
+//   "executeFromPocket(address,address,bytes,uint256,uint256,bytes)" \
+//   $POCKET_ADDRESS \
+//   $TOKEN_ADDRESS \
+//   0x5b88349d \
+//   1 \
+//   $EXPIRY \
+//   $SIGNATURE \
+//   --rpc-url $RPC_URL \
+//   --private-key $PRIVATE_KEY
+
+// TO CHECK IF NONCE USED:
+// cast call $POCKET_ADDRESS "used()(bool)" --rpc-url $RPC_URL
