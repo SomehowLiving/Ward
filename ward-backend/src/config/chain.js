@@ -6,25 +6,36 @@ import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
 
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const PocketABI = JSON.parse(
     fs.readFileSync(
-        path.resolve("src/abi/Pocket.json"),
+        path.resolve(__dirname, "../abi/Pocket.json"),
         "utf8"
     )
 );
 const ControllerABI = JSON.parse(
     fs.readFileSync(
-        path.resolve("src/abi/PocketController.json"),
+        path.resolve(__dirname, "../abi/PocketController.json"),
         "utf8"
     )
 );
 
 const FactoryABI = JSON.parse(
     fs.readFileSync(
-        path.resolve("src/abi/PocketFactory.json"),
+        path.resolve(__dirname, "../abi/PocketFactory.json"),
         "utf8"
     )
 );
+const required = ["RPC_URL", "CONTROLLER_PRIVATE_KEY", "CONTROLLER_ADDRESS", "FACTORY_ADDRESS"];
+for (const key of required) {
+    if (!process.env[key]) {
+        throw new Error(`Missing required environment variable: ${key}`);
+    }
+}
+
 export const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 
 export const controllerSigner = new ethers.Wallet(
