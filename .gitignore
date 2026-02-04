@@ -73,3 +73,5 @@ coverage/
 # Misc
 # =========================
 *.tgz
+GUIDE.md
+.copilot.md
