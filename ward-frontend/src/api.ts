@@ -9,7 +9,6 @@ export interface Pocket {
     owner?: string;
     used: boolean;
     burned: boolean;
-    createdAt?: number;
 }
 
 export interface CreatePocketParams {
@@ -68,7 +67,16 @@ export async function createPocket(params: CreatePocketParams): Promise<{ pocket
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
     });
-    if (!res.ok) throw new Error('Failed to create pocket');
+    if (!res.ok) {
+        let message = 'Failed to create pocket';
+        try {
+            const err = await res.json();
+            message = err?.error?.message || err?.error || message;
+        } catch {
+            // keep default
+        }
+        throw new Error(message);
+    }
     return res.json();
 }
 
@@ -301,4 +309,3 @@ export function encodeTransfer(recipient: string, amount: string): string {
     ]);
     return iface.encodeFunctionData('transfer', [recipient, amount]);
 }
-

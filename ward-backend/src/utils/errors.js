@@ -11,6 +11,7 @@ export function decodeEthersError(err, iface) {
 
   if (err?.reason) return { type: "REVERT", message: err.reason };
   if (err?.code) return { type: "RPC_ERROR", message: err.message };
+  if (err?.message) return { type: "ERROR", message: err.message };
 
   return { type: "UNKNOWN", message: "Execution failed" };
 }

@@ -22,14 +22,7 @@ const ControllerABI = JSON.parse(
         "utf8"
     )
 );
-
-const FactoryABI = JSON.parse(
-    fs.readFileSync(
-        path.resolve(__dirname, "../abi/PocketFactory.json"),
-        "utf8"
-    )
-);
-const required = ["RPC_URL", "CONTROLLER_PRIVATE_KEY", "CONTROLLER_ADDRESS", "FACTORY_ADDRESS"];
+const required = ["RPC_URL", "CONTROLLER_PRIVATE_KEY", "CONTROLLER_ADDRESS"];
 for (const key of required) {
     if (!process.env[key]) {
         throw new Error(`Missing required environment variable: ${key}`);
@@ -46,11 +39,5 @@ export const controllerSigner = new ethers.Wallet(
 export const controller = new ethers.Contract(
     process.env.CONTROLLER_ADDRESS,
     ControllerABI.abi,
-    controllerSigner
-);
-
-export const factory = new ethers.Contract(
-    process.env.FACTORY_ADDRESS,
-    FactoryABI.abi,
     controllerSigner
 );

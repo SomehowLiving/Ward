@@ -3,15 +3,17 @@ import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
 
-import { controller, factory } from "../config/chain.js";
-const PocketABI = JSON.parse(
+import { controller } from "../config/chain.js";
+const PocketArtifact = JSON.parse(
   fs.readFileSync(
     path.resolve("src/abi/Pocket.json"),
     "utf8"
   )
 );
+const PocketABI = PocketArtifact.abi;
 import { decodeEthersError } from "../utils/errors.js";
 import { requireAddress } from "../utils/validate.js";
+import { pocketRegistry } from "../utils/pocketRegistry.js";
 
 const router = express.Router();
 
@@ -50,48 +52,51 @@ router.get("/pocket/:address", async (req, res) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Pocket discovery (from factory events)                                      */
+/* Pocket discovery (registry + controller state)                               */
 /* -------------------------------------------------------------------------- */
 
 /**
  * List pockets created for a user
  * GET /api/controller/pockets/:userAddress
  *
- * Source of truth: PocketFactory events
+ * Source of truth: PocketController state + backend registry
  */
 router.get("/pockets/:userAddress", async (req, res) => {
   try {
     const { userAddress } = req.params;
     requireAddress(userAddress, "user");
 
-    const filter = factory.filters.PocketDeployed(null, userAddress);
-    const events = await factory.queryFilter(filter, 0, "latest");
+    const provider = controller.runner.provider;
+    const storedPockets = pocketRegistry.getPocketsByOwner(userAddress);
+    const pockets = [];
 
-    const pockets = await Promise.all(
-      events.map(async (e) => {
-        const pocketAddress = e.args.pocket;
+    for (const pocketAddress of storedPockets) {
+      try {
+        const [valid, owner] = await Promise.all([
+          controller.validPocket(pocketAddress),
+          controller.pocketOwner(pocketAddress)
+        ]);
+        if (!valid) continue;
+        if (owner.toLowerCase() !== userAddress.toLowerCase()) continue;
 
-        const pocket = new ethers.Contract(
+        const pocket = new ethers.Contract(pocketAddress, PocketABI, provider);
+        const [used, burned] = await Promise.all([
+          pocket.used(),
+          pocket.burned()
+        ]);
+        pockets.push({ address: pocketAddress, owner, used, burned });
+      } catch (err) {
+        console.warn("[GET /api/controller/pockets/:userAddress] skipping pocket", {
+          userAddress,
           pocketAddress,
-          PocketABI,
-          controller.runner.provider
-        );
-
-        const used = await pocket.used();
-
-        return {
-          address: pocketAddress,
-          used,
-          createdAt: e.blockNumber // replace with timestamp if indexed
-        };
-      })
-    );
+          error: err?.message
+        });
+      }
+    }
 
     res.json({ pockets });
   } catch (err) {
-    res.status(500).json({
-      error: err.message
-    });
+    res.json({ pockets: [] });
   }
 });
 

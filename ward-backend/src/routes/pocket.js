@@ -4,18 +4,21 @@ import fs from "fs";
 import path from "path";
 
 
-import { controller, factory, provider } from "../config/chain.js";
+import { controller, provider } from "../config/chain.js";
 // import PocketABI from "../abi/Pocket.json" assert { type: "json" };
-const PocketABI = JSON.parse(
+const PocketArtifact = JSON.parse(
   fs.readFileSync(
     path.resolve("src/abi/Pocket.json"),
     "utf8"
   )
 );
+const PocketABI = PocketArtifact.abi;
+const PocketBytecode = PocketArtifact?.bytecode?.object;
 
 import { decodeEthersError } from "../utils/errors.js";
-import { requireAddress } from "../utils/validate.js";
+import { requireAddress, ValidationError } from "../utils/validate.js";
 import { fetchRiskTier } from "../utils/risk.js";
+import { pocketRegistry } from "../utils/pocketRegistry.js";
 
 const router = express.Router();
 
@@ -25,6 +28,26 @@ const router = express.Router();
 
 function getPocket(address) {
     return new ethers.Contract(address, PocketABI, provider);
+}
+
+async function computePocketAddress(user, salt) {
+    if (!PocketBytecode) {
+        throw new Error("Pocket bytecode unavailable");
+    }
+    const factoryAddress = await controller.factory();
+    const controllerAddress = await controller.getAddress();
+    const createSalt = ethers.solidityPackedKeccak256(
+        ["address", "uint256"],
+        [user, salt]
+    );
+    const constructorArgs = ethers.AbiCoder.defaultAbiCoder().encode(
+        ["address", "address"],
+        [controllerAddress, user]
+    );
+    const initCodeHash = ethers.keccak256(
+        ethers.concat([PocketBytecode, constructorArgs])
+    );
+    return ethers.getCreate2Address(factoryAddress, createSalt, initCodeHash);
 }
 
 async function simulateExec(args) {
@@ -43,6 +66,10 @@ async function simulateExec(args) {
     }
 }
 
+function isValidationError(err) {
+    return err instanceof ValidationError || err?.name === "ValidationError";
+}
+
 /* -------------------------------------------------------------------------- */
 /* Routes                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -55,24 +82,33 @@ router.post("/create", async (req, res) => {
     try {
         const { user, salt } = req.body;
         requireAddress(user, "user");
+        if (salt === undefined || salt === null) {
+            return res.status(400).json({
+                error: { type: "VALIDATION", message: "Missing salt" }
+            });
+        }
+        const normalizedSalt = BigInt(salt);
+        const pocket = await computePocketAddress(user, normalizedSalt);
 
-        const tx = await controller.createPocket(user, salt);
-        const receipt = await tx.wait();
+        const tx = await controller.createPocket(user, normalizedSalt);
+        await tx.wait();
 
-        const event = receipt.logs.find(
-            l =>
-                l.topics[0] ===
-                factory.interface.getEvent("PocketDeployed").topicHash
-        );
-
-        if (!event) {
-            return res.status(500).json({ error: "PocketDeployed event not found" });
+        const isValid = await controller.validPocket(pocket);
+        if (!isValid) {
+            throw new Error("Pocket creation transaction succeeded but controller did not mark pocket valid");
         }
 
-        const { pocket } = factory.interface.parseLog(event).args;
+        pocketRegistry.addPocket(user, pocket);
         res.json({ pocket });
     } catch (err) {
-        res.status(500).json({
+        console.error("[POST /api/pocket/create] failed", {
+            user: req.body?.user,
+            salt: req.body?.salt,
+            error: err?.message,
+            stack: err?.stack
+        });
+        const status = isValidationError(err) ? 400 : 500;
+        res.status(status).json({
             error: decodeEthersError(err, controller.interface)
         });
     }
@@ -86,6 +122,12 @@ router.get("/:address", async (req, res) => {
     try {
         const { address } = req.params;
         requireAddress(address, "pocket");
+        const code = await provider.getCode(address);
+        if (code === "0x") {
+            return res.status(404).json({
+                error: { type: "NOT_FOUND", message: "Pocket contract not found" }
+            });
+        }
 
         const pocket = getPocket(address);
 
@@ -97,7 +139,8 @@ router.get("/:address", async (req, res) => {
 
         res.json({ address, owner, used, burned });
     } catch (err) {
-        res.status(500).json({
+        const status = isValidationError(err) ? 400 : 500;
+        res.status(status).json({
             error: decodeEthersError(err, controller.interface)
         });
     }

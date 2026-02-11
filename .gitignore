@@ -75,3 +75,5 @@ coverage/
 *.tgz
 GUIDE.md
 .copilot.md
+
+ward-backend/data/pocket-registry.json

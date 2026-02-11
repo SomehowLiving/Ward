@@ -11,12 +11,18 @@ import riskRoutes from "./routes/risk.js";
 import tokenRoutes from "./routes/token.js";
 import metaRoutes from "./routes/meta.js";
 import { requireAddress } from "./utils/validate.js";
-import { factory, provider } from "./config/chain.js";
+import { controller, provider } from "./config/chain.js";
+import { pocketRegistry } from "./utils/pocketRegistry.js";
 
 dotenv.config();
 
 const app = express();
 import cors from "cors";
+
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 app.use(
   cors({
@@ -32,106 +38,6 @@ app.use(
 app.use(express.json());
 
 // app.use(express.json());
-
-// /* -------------------------------------------------------------------------- */
-// /* Calldata decoding helper                                                   */
-// /* -------------------------------------------------------------------------- */
-
-// /**
-//  * Decode calldata for ERC20 operations
-//  * POST /api/calldata/decode
-//  */
-// app.post("/api/calldata/decode", (req, res) => {
-//   try {
-//     const { data } = req.body;
-
-//     if (!data || !data.startsWith("0x")) {
-//       return res.status(400).json({ error: "Invalid calldata" });
-//     }
-
-//     const iface = new ethers.Interface([
-//       "function approve(address spender, uint256 amount) external",
-//       "function transfer(address recipient, uint256 amount) external",
-//     ]);
-
-//     try {
-//       const decoded = iface.parseTransaction({ data });
-
-//       if (!decoded) {
-//         return res.json({ function: "unknown", args: [], confidence: "low" });
-//       }
-
-//       const functionName = decoded.name;
-//       const args = decoded.args.map((a) => a.toString());
-
-//       res.json({
-//         function: functionName,
-//         args,
-//         confidence: "high",
-//       });
-//     } catch {
-//       // Not a standard ERC20 call
-//       res.json({
-//         function: "custom",
-//         args: [data],
-//         confidence: "low",
-//       });
-//     }
-//   } catch (err) {
-//     res.status(400).json({ error: err.message });
-//   }
-// });
-
-// /* -------------------------------------------------------------------------- */
-// /* Pocket discovery                                                           */
-// /* -------------------------------------------------------------------------- */
-
-// /**
-//  * List pockets created for a user
-//  * GET /api/pockets/:userAddress
-//  */
-// app.get("/api/pockets/:userAddress", async (req, res) => {
-//   try {
-//     const { userAddress } = req.params;
-//     requireAddress(userAddress, "user");
-
-//     const filter = factory.filters.PocketDeployed(null, userAddress);
-//     const events = await factory.queryFilter(filter, 0, "latest");
-
-//     const PocketABI = JSON.parse(
-//       fs.readFileSync(
-//         path.resolve("src/abi/Pocket.json"),
-//         "utf8"
-//       )
-//     );
-
-//     const pockets = await Promise.all(
-//       events.map(async (e) => {
-//         const pocketAddress = e.args.pocket;
-
-//         const pocket = new ethers.Contract(
-//           pocketAddress,
-//           PocketABI,
-//           provider
-//         );
-
-//         const used = await pocket.used();
-
-//         return {
-//           address: pocketAddress,
-//           used,
-//           createdAt: e.blockNumber
-//         };
-//       })
-//     );
-
-//     res.json({ pockets });
-//   } catch (err) {
-//     res.status(500).json({
-//       error: err.message
-//     });
-//   }
-// });
 
 /* -------------------------------------------------------------------------- */
 /* Route mounting                                                             */
@@ -173,6 +79,150 @@ app.use("/api/token", tokenRoutes);
  */
 app.use("/api", metaRoutes);
 
+/**
+ * Decode calldata helper (best-effort)
+ * POST /api/calldata/decode
+ */
+app.post("/api/calldata/decode", (req, res) => {
+  const { data } = req.body || {};
+  if (typeof data !== "string" || !data.startsWith("0x")) {
+    return res.status(400).json({ error: "Invalid calldata hex string" });
+  }
+
+  const selector = data.slice(0, 10);
+  const argsData = `0x${data.slice(10)}`;
+  const hasArgs = argsData.length > 2;
+
+  return res.json({
+    function: selector,
+    args: hasArgs ? [argsData] : [],
+    confidence: hasArgs ? "low" : "medium"
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Pocket discovery (list by user)                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * List pockets created for a user
+ * GET /api/pockets/:userAddress
+ *
+ * Behaviour:
+ * - invalid address      -> 400
+ * - valid, zero pockets  -> 200 { pockets: [] }
+ * - internal error       -> 500
+ */
+app.get("/api/pockets/:userAddress", async (req, res) => {
+  const { userAddress } = req.params;
+
+  console.log("[GET /api/pockets/:userAddress] incoming request", {
+    userAddress
+  });
+
+  // Address validation with explicit 400 on failure
+  try {
+    requireAddress(userAddress, "user");
+  } catch (err) {
+    console.warn("[GET /api/pockets/:userAddress] invalid user address", {
+      userAddress,
+      error: err?.message
+    });
+    return res.status(400).json({ error: "Invalid user address" });
+  }
+
+  try {
+    const storedPockets = pocketRegistry.getPocketsByOwner(userAddress);
+    if (!storedPockets || storedPockets.length === 0) {
+      console.log(
+        "[GET /api/pockets/:userAddress] no pockets found for user",
+        { userAddress }
+      );
+      return res.json({ pockets: [] });
+    }
+
+    const PocketArtifact = JSON.parse(
+      fs.readFileSync(
+        path.resolve("src/abi/Pocket.json"),
+        "utf8"
+      )
+    );
+    const PocketABI = PocketArtifact.abi;
+
+    const pockets = [];
+    for (const pocketAddress of storedPockets) {
+      try {
+        const [valid, owner] = await Promise.all([
+          controller.validPocket(pocketAddress),
+          controller.pocketOwner(pocketAddress)
+        ]);
+
+        if (!valid) continue;
+        if (owner.toLowerCase() !== userAddress.toLowerCase()) continue;
+
+        const pocket = new ethers.Contract(pocketAddress, PocketABI, provider);
+        const [used, burned] = await Promise.all([
+          pocket.used(),
+          pocket.burned()
+        ]);
+
+        pockets.push({
+          address: pocketAddress,
+          owner,
+          used,
+          burned
+        });
+      } catch (err) {
+        console.warn("[GET /api/pockets/:userAddress] skipping pocket on read failure", {
+          userAddress,
+          pocketAddress,
+          error: err?.message
+        });
+      }
+    }
+
+    console.log(
+      "[GET /api/pockets/:userAddress] successfully resolved pockets",
+      {
+        userAddress,
+        pocketsCount: pockets.length
+      }
+    );
+
+    res.json({ pockets });
+  } catch (err) {
+    console.error(
+      "[GET /api/pockets/:userAddress] internal error while listing pockets",
+      {
+        userAddress,
+        error: err?.message,
+        stack: err?.stack
+      }
+    );
+
+    res.json({ pockets: [] });
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: "Route not found",
+    method: req.method,
+    path: req.originalUrl
+  });
+});
+
+app.use((err, req, res, _next) => {
+  console.error("[unhandled error]", {
+    method: req.method,
+    path: req.originalUrl,
+    error: err?.message,
+    stack: err?.stack
+  });
+  res.status(err?.statusCode || 500).json({
+    error: err?.message || "Internal server error"
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /* Start server                                                               */

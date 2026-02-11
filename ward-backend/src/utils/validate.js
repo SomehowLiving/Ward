@@ -1,9 +1,17 @@
 import { ethers } from "ethers";
 import { controller } from "../config/chain.js";
 
+export class ValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ValidationError";
+        this.statusCode = 400;
+    }
+}
+
 export function requireAddress(value, name) {
     if (!ethers.isAddress(value)) {
-        throw new Error(`Invalid address: ${name}`);
+        throw new ValidationError(`Invalid address: ${name}`);
     }
 }
 
