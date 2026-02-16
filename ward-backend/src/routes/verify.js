@@ -4,37 +4,25 @@ import fs from "fs";
 import path from "path";
 
 import { provider } from "../config/chain.js";
+import { requireAddress } from "../utils/validate.js";
+
+const router = express.Router();
+
+/* -------------------------------------------------------------------------- */
+/* Load ABI correctly (FIX: use .abi)                                         */
+/* -------------------------------------------------------------------------- */
 
 const PocketABI = JSON.parse(
   fs.readFileSync(
     path.resolve("src/abi/Pocket.json"),
     "utf8"
   )
-);
-import { requireAddress } from "../utils/validate.js";
-
-const router = express.Router();
+).abi;
 
 /* -------------------------------------------------------------------------- */
 /* Verify EIP-712 execution intent                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Verify execution intent
- * POST /api/verify/exec-intent
- *
- * Verifies:
- * - signature correctness
- * - signer is pocket owner
- * - signature not expired
- *
- * Does NOT:
- * - check nonce usage
- * - check used/burned state
- * - execute anything
- *
- * On-chain enforcement remains authoritative.
- */
 router.post("/exec-intent", async (req, res) => {
   try {
     const {
@@ -49,11 +37,16 @@ router.post("/exec-intent", async (req, res) => {
     requireAddress(pocket, "pocket");
     requireAddress(target, "target");
 
-    // Rebuild EIP-712 domain exactly as Pocket does
+    const { chainId } = await provider.getNetwork();
+
+    /* ---------------------------------------------------------------------- */
+    /* Domain                                                                 */
+    /* ---------------------------------------------------------------------- */
+
     const domain = {
       name: "Ward Pocket",
       version: "1",
-      chainId: Number(process.env.CHAIN_ID),
+      chainId: Number(chainId),
       verifyingContract: pocket
     };
 
@@ -67,13 +60,28 @@ router.post("/exec-intent", async (req, res) => {
       ]
     };
 
-    const digest = ethers.TypedDataEncoder.hash(
+    const message = {
+      pocket,
+      target,
+      dataHash,
+      nonce: BigInt(nonce),
+      expiry: BigInt(expiry)
+    };
+
+    /* ---------------------------------------------------------------------- */
+    /* Recover signer                                                         */
+    /* ---------------------------------------------------------------------- */
+
+    const recovered = ethers.verifyTypedData(
       domain,
       types,
-      { pocket, target, dataHash, nonce, expiry }
+      message,
+      signature
     );
 
-    const recovered = ethers.recoverAddress(digest, signature);
+    /* ---------------------------------------------------------------------- */
+    /* Compare against pocket owner                                           */
+    /* ---------------------------------------------------------------------- */
 
     const pocketContract = new ethers.Contract(
       pocket,
@@ -86,20 +94,24 @@ router.post("/exec-intent", async (req, res) => {
     if (recovered.toLowerCase() !== owner.toLowerCase()) {
       return res.json({
         valid: false,
-        reason: "Invalid signer"
+        reason: "Invalid signer",
+        recovered,
+        owner,
+        chainId: Number(chainId)
       });
     }
 
-    if (expiry < Math.floor(Date.now() / 1000)) {
+    if (Number(expiry) < Math.floor(Date.now() / 1000)) {
       return res.json({
         valid: false,
         reason: "Signature expired"
       });
     }
 
-    res.json({ valid: true });
+    return res.json({ valid: true });
+
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       valid: false,
       reason: err.message
     });

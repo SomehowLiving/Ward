@@ -70,6 +70,13 @@ function isValidationError(err) {
     return err instanceof ValidationError || err?.name === "ValidationError";
 }
 
+const ERC20_MIN_ABI = [
+    "function name() view returns (string)",
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address) view returns (uint256)"
+];
+
 /* -------------------------------------------------------------------------- */
 /* Routes                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -142,6 +149,90 @@ router.get("/:address", async (req, res) => {
         const status = isValidationError(err) ? 400 : 500;
         res.status(status).json({
             error: decodeEthersError(err, controller.interface)
+        });
+    }
+});
+
+/**
+ * Asset indexer for a pocket
+ * GET /api/pocket/:address/assets
+ *
+ * Scans ERC20 Transfer logs to/from the pocket and returns current balances
+ * with token metadata for all discovered token contracts.
+ */
+router.get("/:address/assets", async (req, res) => {
+    try {
+        const { address } = req.params;
+        requireAddress(address, "pocket");
+
+        const code = await provider.getCode(address);
+        if (code === "0x") {
+            return res.status(404).json({
+                error: { type: "NOT_FOUND", message: "Pocket contract not found" }
+            });
+        }
+
+        const normalizedPocket = ethers.getAddress(address);
+        const pocketTopic = ethers.zeroPadValue(normalizedPocket, 32);
+        const transferTopic = ethers.id("Transfer(address,address,uint256)");
+        const fromBlock = Number(process.env.ASSET_INDEXER_FROM_BLOCK ?? 0);
+        const toBlock = "latest";
+
+        const [incomingLogs, outgoingLogs, nativeBalance] = await Promise.all([
+            provider.getLogs({
+                fromBlock,
+                toBlock,
+                topics: [transferTopic, null, pocketTopic]
+            }),
+            provider.getLogs({
+                fromBlock,
+                toBlock,
+                topics: [transferTopic, pocketTopic, null]
+            }),
+            provider.getBalance(normalizedPocket)
+        ]);
+
+        const tokenAddresses = new Set();
+        for (const log of incomingLogs) tokenAddresses.add(ethers.getAddress(log.address));
+        for (const log of outgoingLogs) tokenAddresses.add(ethers.getAddress(log.address));
+
+        const assets = [];
+        for (const tokenAddress of tokenAddresses) {
+            try {
+                const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, provider);
+
+                const [name, symbol, decimals, balanceRaw] = await Promise.all([
+                    token.name().catch(() => "Unknown Token"),
+                    token.symbol().catch(() => "UNKNOWN"),
+                    token.decimals().catch(() => 18),
+                    token.balanceOf(normalizedPocket)
+                ]);
+
+                if (balanceRaw === 0n) continue;
+
+                assets.push({
+                    address: tokenAddress,
+                    name,
+                    symbol,
+                    decimals: Number(decimals),
+                    balance: balanceRaw.toString(),
+                    formattedBalance: ethers.formatUnits(balanceRaw, Number(decimals))
+                });
+            } catch {
+                // Ignore contracts that don't behave like ERC20s.
+            }
+        }
+
+        res.json({
+            pocket: normalizedPocket,
+            nativeBalance: nativeBalance.toString(),
+            formattedNativeBalance: ethers.formatEther(nativeBalance),
+            assets
+        });
+    } catch (err) {
+        const status = isValidationError(err) ? 400 : 500;
+        res.status(status).json({
+            error: err?.message || "Failed to index pocket assets"
         });
     }
 });

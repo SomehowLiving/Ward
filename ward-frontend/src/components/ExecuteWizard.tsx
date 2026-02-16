@@ -85,7 +85,8 @@ export default function ExecuteWizard() {
 
   // Execution params
   const [nonce, setNonce] = useState(1);
-  const expiry = Math.floor(Date.now() / 1000) + 3600;
+  // Keep expiry stable for the full intent lifecycle; changing it after signing invalidates the signature.
+  const [expiry] = useState(() => Math.floor(Date.now() / 1000) + 3600);
 
   useEffect(() => {
     if (!isConnected || !pocketAddress || !userAddress) {
@@ -229,6 +230,10 @@ export default function ExecuteWizard() {
     setError(null);
 
     try {
+
+      const signerAddr = await signer.getAddress();
+    console.log("Signer address:", signerAddr);
+
       let calldata = '0x';
       if (txInput.actionType === 'approve' && txInput.spender && txInput.amount) {
         calldata = encodeApprove(txInput.spender, txInput.amount);
@@ -612,4 +617,3 @@ export default function ExecuteWizard() {
     </div>
   );
 }
-

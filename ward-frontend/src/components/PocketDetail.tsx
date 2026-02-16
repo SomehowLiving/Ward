@@ -4,12 +4,14 @@ import { useAccount, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import { 
   getPocket, 
+  getPocketAssets,
   getControllerPocket,
   signBurnIntent,
   burnPocket,
   sweepPocket,
   calculateFee,
-  Pocket
+  Pocket,
+  PocketAsset
 } from '../api';
 
 declare global {
@@ -33,6 +35,10 @@ export default function PocketDetail() {
   const [sweepForm, setSweepForm] = useState({ token: '', receiver: '', amount: '' });
   const [sweepFee, setSweepFee] = useState<{ tier: number; fee: string; net: string } | null>(null);
   const [sweeping, setSweeping] = useState(false);
+  const [nativeBalance, setNativeBalance] = useState<string>('0');
+  const [assets, setAssets] = useState<PocketAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+
 
   useEffect(() => {
     if (!isConnected || !pocketAddress || !userAddress) {
@@ -40,7 +46,8 @@ export default function PocketDetail() {
       return;
     }
     initSigner();
-    fetchPocket();
+    fetchPocket(); 
+    fetchAssets();
   }, [isConnected, pocketAddress, userAddress]);
 
   const initSigner = async () => {
@@ -66,6 +73,22 @@ export default function PocketDetail() {
       setLoading(false);
     }
   };
+  const fetchAssets = async () => {
+    if (!pocketAddress) return;
+    setAssetsLoading(true);
+    try {
+      const response = await getPocketAssets(pocketAddress);
+      setNativeBalance(response.formattedNativeBalance);
+      setAssets(response.assets);
+    } catch (err) {
+      console.error('Asset indexing failed', err);
+      setNativeBalance('0');
+      setAssets([]);
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
+
 
   const handleBurn = async () => {
     if (!signer || !pocketAddress || pocket?.used || pocket?.burned) return;
@@ -111,6 +134,7 @@ export default function PocketDetail() {
       alert('Sweep successful!');
       setSweepForm({ token: '', receiver: '', amount: '' });
       setSweepFee(null);
+      await fetchAssets();
     } catch (err: any) {
       setError(err.message);
     }
@@ -167,7 +191,47 @@ export default function PocketDetail() {
           <div>{controllerInfo.valid ? '✓ Valid' : '✗ Invalid'}</div>
         </div>
       </section>
-
+      <section style={{ marginBottom: '2rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0 }}>Pocket Assets</h3>
+          <button onClick={fetchAssets} disabled={assetsLoading}>
+            {assetsLoading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+        <div style={{ marginBottom: '0.75rem', color: '#333' }}>
+          Native Balance: <strong>{nativeBalance} ETH</strong>
+        </div>
+        {assets.length === 0 ? (
+          <div style={{ color: '#666', fontSize: '0.9rem' }}>
+            No ERC20 assets indexed for this pocket yet.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: '0.5rem 0.25rem' }}>Token</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: '0.5rem 0.25rem' }}>Symbol</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #eee', padding: '0.5rem 0.25rem' }}>Balance</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: '0.5rem 0.25rem' }}>Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assets.map((asset) => (
+                  <tr key={asset.address}>
+                    <td style={{ padding: '0.5rem 0.25rem' }}>{asset.name}</td>
+                    <td style={{ padding: '0.5rem 0.25rem' }}>{asset.symbol}</td>
+                    <td style={{ padding: '0.5rem 0.25rem', textAlign: 'right' }}>{asset.formattedBalance}</td>
+                    <td style={{ padding: '0.5rem 0.25rem', fontFamily: 'monospace' }}>
+                      {asset.address.slice(0, 8)}...{asset.address.slice(-6)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       {error && <p style={{ color: 'red', marginBottom: '1rem' }}>{error}</p>}
 
       <section style={{ display: 'grid', gap: '1rem' }}>
@@ -182,7 +246,7 @@ export default function PocketDetail() {
               {disabled ? 'Pocket Used/Burned' : 'Execute Transaction'}
             </button>
           </Link>
-        </div>
+        </div>       
 
         {/* Sweep Funds */}
         <div style={{ padding: '1.5rem', border: '1px solid #ddd', borderRadius: '8px' }}>
@@ -250,4 +314,3 @@ export default function PocketDetail() {
     </div>
   );
 }
-

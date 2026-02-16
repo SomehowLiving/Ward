@@ -60,6 +60,22 @@ export interface CalldataDecode {
     confidence: string;
 }
 
+export interface PocketAsset {
+    address: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    balance: string;
+    formattedBalance: string;
+}
+
+export interface PocketAssetsResponse {
+    pocket: string;
+    nativeBalance: string;
+    formattedNativeBalance: string;
+    assets: PocketAsset[];
+}
+
 // API Functions
 export async function createPocket(params: CreatePocketParams): Promise<{ pocket: string }> {
     const res = await fetch(API.pocket.create, {
@@ -83,6 +99,12 @@ export async function createPocket(params: CreatePocketParams): Promise<{ pocket
 export async function getPocket(address: string): Promise<Pocket> {
     const res = await fetch(API.pocket.get(address));
     if (!res.ok) throw new Error('Failed to get pocket');
+    return res.json();
+}
+
+export async function getPocketAssets(address: string): Promise<PocketAssetsResponse> {
+    const res = await fetch(API.pocket.assets(address));
+    if (!res.ok) throw new Error('Failed to get pocket assets');
     return res.json();
 }
 
@@ -275,12 +297,12 @@ export async function signExecIntent(
     pocket: string,
     target: string,
     data: string,
-    nonce: number,
-    expiry: number,
+    nonce: BigInt,
+    expiry: BigInt,
     chainId: number
 ): Promise<string> {
     const dataHash = ethers.keccak256(data);
-    const typedData = getExecTypedData(pocket, target, dataHash, nonce, expiry, chainId);
+    const typedData = getExecTypedData(pocket, target, dataHash, BigInt(nonce), BigInt(expiry), chainId);
     return signer.signTypedData(typedData.domain, typedData.types, typedData.value);
 }
 

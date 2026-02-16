@@ -2,6 +2,7 @@ export const API = {
   pocket: {
     create: "/api/pocket/create",
     get: (address: string) => `/api/pocket/${address}`,
+    assets: (address: string) => `/api/pocket/${address}/assets`,
     exec: "/api/pocket/exec",
     burn: "/api/pocket/burn",
     sweep: "/api/pocket/sweep",
