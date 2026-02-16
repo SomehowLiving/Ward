@@ -152,6 +152,10 @@ class PocketRegistry {
     const pocket = ethers.getAddress(String(pocketAddress)).toLowerCase();
     return this.pocketToRecord.get(pocket) ?? null;
   }
+
+  getAllOwners() {
+    return Array.from(this.ownerToPockets.keys());
+  }
 }
 
 export const pocketRegistry = new PocketRegistry();

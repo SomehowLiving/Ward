@@ -26,6 +26,7 @@ import { decodeEthersError } from "../utils/errors.js";
 import { requireAddress, ValidationError } from "../utils/validate.js";
 import { fetchRiskTier } from "../utils/risk.js";
 import { pocketRegistry } from "../utils/pocketRegistry.js";
+import { backfillPocketCreatedBlocks } from "../utils/backfillPocketCreatedBlocks.js";
 
 const router = express.Router();
 
@@ -202,6 +203,23 @@ router.post("/create", async (req, res) => {
         const status = isValidationError(err) ? 400 : 500;
         res.status(status).json({
             error: decodeEthersError(err, controller.interface)
+        });
+    }
+});
+
+/**
+ * Backfill missing createdBlock values in local pocket registry
+ * POST /api/pocket/backfill-created-blocks
+ */
+router.post("/backfill-created-blocks", async (req, res) => {
+    try {
+        const { fromBlock, toBlock, dryRun } = req.body ?? {};
+        const result = await backfillPocketCreatedBlocks({ fromBlock, toBlock, dryRun });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({
+            ok: false,
+            error: err?.message || "Backfill failed"
         });
     }
 });

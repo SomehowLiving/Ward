@@ -79,6 +79,40 @@ Creates a new Pocket for a user.
 
 ---
 
+### Backfill Pocket Created Blocks
+
+**POST** `/api/pocket/backfill-created-blocks`
+
+Backfills `createdBlock` for already-known pockets by scanning historical `PocketDeployed` logs from the factory.
+
+**Body (optional)**
+
+```json
+{
+  "fromBlock": 0,
+  "toBlock": "latest",
+  "dryRun": true
+}
+```
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "factory": "0xFactory",
+  "fromBlock": 0,
+  "toBlock": "latest",
+  "dryRun": true,
+  "logsScanned": 10,
+  "knownPockets": 3,
+  "matched": 3,
+  "updated": 0
+}
+```
+
+---
+
 ### Get Pocket Owner (Direct)
 
 **GET** `/api/pocket/:address/owner`
