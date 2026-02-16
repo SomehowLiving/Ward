@@ -9,7 +9,8 @@ const registryFile = path.resolve(dataDir, "pocket-registry.json");
 
 class PocketRegistry {
   constructor() {
-    this.memory = new Map();
+    this.ownerToPockets = new Map();
+    this.pocketToRecord = new Map();
     this.persistenceEnabled = true;
     this._init();
   }
@@ -22,28 +23,62 @@ class PocketRegistry {
       }
       const raw = fs.readFileSync(registryFile, "utf8");
       const parsed = raw ? JSON.parse(raw) : {};
-      for (const [owner, pockets] of Object.entries(parsed)) {
-        if (!Array.isArray(pockets)) continue;
-        let normalizedOwner;
-        try {
-          normalizedOwner = ethers.getAddress(owner);
-        } catch {
-          continue;
+
+      // Backward compatibility: old format was { [owner]: string[] }.
+      const isLegacy =
+        parsed &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        !("owners" in parsed) &&
+        !("pockets" in parsed);
+
+      if (isLegacy) {
+        for (const [owner, pockets] of Object.entries(parsed)) {
+          if (!Array.isArray(pockets)) continue;
+          for (const pocket of pockets) {
+            try {
+              this.addPocket(owner, pocket, null, false);
+            } catch {
+              // Ignore malformed legacy entries.
+            }
+          }
         }
-        this.memory.set(
-          normalizedOwner,
-          new Set(
-            pockets
-              .map((p) => {
-                try {
-                  return ethers.getAddress(String(p)).toLowerCase();
-                } catch {
-                  return null;
-                }
-              })
-              .filter(Boolean)
-          )
-        );
+        this._persist();
+        return;
+      }
+
+      const owners = parsed?.owners ?? {};
+      const pockets = parsed?.pockets ?? {};
+
+      for (const [owner, pocketList] of Object.entries(owners)) {
+        if (!Array.isArray(pocketList)) continue;
+        const normalizedOwner = ethers.getAddress(owner);
+        const set = this.ownerToPockets.get(normalizedOwner) ?? new Set();
+        for (const p of pocketList) {
+          try {
+            set.add(ethers.getAddress(String(p)).toLowerCase());
+          } catch {
+            // ignore invalid pocket entry
+          }
+        }
+        this.ownerToPockets.set(normalizedOwner, set);
+      }
+
+      for (const [pocketAddress, record] of Object.entries(pockets)) {
+        try {
+          const pocket = ethers.getAddress(pocketAddress).toLowerCase();
+          const owner = ethers.getAddress(String(record?.owner));
+          const createdBlock =
+            record?.createdBlock === null || record?.createdBlock === undefined
+              ? null
+              : Number(record.createdBlock);
+          this.pocketToRecord.set(pocket, {
+            owner,
+            createdBlock: Number.isFinite(createdBlock) && createdBlock >= 0 ? createdBlock : null
+          });
+        } catch {
+          // Ignore malformed record.
+        }
       }
     } catch (err) {
       this.persistenceEnabled = false;
@@ -54,11 +89,20 @@ class PocketRegistry {
   }
 
   _toObject() {
-    const out = {};
-    for (const [owner, pockets] of this.memory.entries()) {
-      out[owner] = Array.from(pockets);
+    const owners = {};
+    for (const [owner, pockets] of this.ownerToPockets.entries()) {
+      owners[owner] = Array.from(pockets);
     }
-    return out;
+
+    const pockets = {};
+    for (const [pocket, record] of this.pocketToRecord.entries()) {
+      pockets[pocket] = {
+        owner: record.owner,
+        createdBlock: record.createdBlock
+      };
+    }
+
+    return { owners, pockets };
   }
 
   _persist() {
@@ -75,19 +119,38 @@ class PocketRegistry {
     }
   }
 
-  addPocket(ownerAddress, pocketAddress) {
+  addPocket(ownerAddress, pocketAddress, createdBlock = null, persist = true) {
     const owner = ethers.getAddress(String(ownerAddress));
-    const pocket = ethers.getAddress(String(pocketAddress));
-    const existing = this.memory.get(owner) ?? new Set();
+    const pocket = ethers.getAddress(String(pocketAddress)).toLowerCase();
+    const existing = this.ownerToPockets.get(owner) ?? new Set();
     existing.add(pocket.toLowerCase());
-    this.memory.set(owner, existing);
-    this._persist();
+    this.ownerToPockets.set(owner, existing);
+
+    const normalizedCreatedBlock =
+      createdBlock === null || createdBlock === undefined
+        ? null
+        : Number(createdBlock);
+    const current = this.pocketToRecord.get(pocket);
+    this.pocketToRecord.set(pocket, {
+      owner,
+      createdBlock:
+        Number.isFinite(normalizedCreatedBlock) && normalizedCreatedBlock >= 0
+          ? normalizedCreatedBlock
+          : current?.createdBlock ?? null
+    });
+
+    if (persist) this._persist();
   }
 
   getPocketsByOwner(ownerAddress) {
     const owner = ethers.getAddress(String(ownerAddress));
-    const found = this.memory.get(owner);
+    const found = this.ownerToPockets.get(owner);
     return found ? Array.from(found) : [];
+  }
+
+  getPocketRecord(pocketAddress) {
+    const pocket = ethers.getAddress(String(pocketAddress)).toLowerCase();
+    return this.pocketToRecord.get(pocket) ?? null;
   }
 }
 

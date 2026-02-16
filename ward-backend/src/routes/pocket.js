@@ -7,13 +7,20 @@ import path from "path";
 import { controller, provider } from "../config/chain.js";
 // import PocketABI from "../abi/Pocket.json" assert { type: "json" };
 const PocketArtifact = JSON.parse(
-  fs.readFileSync(
-    path.resolve("src/abi/Pocket.json"),
-    "utf8"
-  )
+    fs.readFileSync(
+        path.resolve("src/abi/Pocket.json"),
+        "utf8"
+    )
+);
+const PocketFactoryArtifact = JSON.parse(
+    fs.readFileSync(
+        path.resolve("src/abi/PocketFactory.json"),
+        "utf8"
+    )
 );
 const PocketABI = PocketArtifact.abi;
 const PocketBytecode = PocketArtifact?.bytecode?.object;
+const PocketFactoryABI = PocketFactoryArtifact.abi;
 
 import { decodeEthersError } from "../utils/errors.js";
 import { requireAddress, ValidationError } from "../utils/validate.js";
@@ -77,6 +84,83 @@ const ERC20_MIN_ABI = [
     "function balanceOf(address) view returns (uint256)"
 ];
 
+async function findPocketDeployedBlock(receipt, expectedPocket) {
+    const expected = ethers.getAddress(expectedPocket);
+    const factoryAddress = ethers.getAddress(await controller.factory());
+    const factoryIface = new ethers.Interface(PocketFactoryABI);
+
+    for (const log of receipt.logs ?? []) {
+        if (!log?.address) continue;
+        if (ethers.getAddress(log.address) !== factoryAddress) continue;
+        try {
+            const parsed = factoryIface.parseLog(log);
+            if (parsed?.name !== "PocketDeployed") continue;
+            const deployedPocket = ethers.getAddress(parsed.args.pocket);
+            if (deployedPocket === expected) {
+                return Number(receipt.blockNumber);
+            }
+        } catch {
+            // Ignore unrelated logs.
+        }
+    }
+
+    return Number(receipt.blockNumber);
+}
+
+async function getLogsChunked(baseFilter, fromBlock, toBlock, step = 10) {
+    const logs = [];
+
+    for (let start = fromBlock; start <= toBlock; start += step) {
+        const end = Math.min(start + step - 1, toBlock);
+
+        const chunk = await provider.getLogs({
+            ...baseFilter,
+            fromBlock: start,
+            toBlock: end
+        });
+
+        logs.push(...chunk);
+    }
+
+    return logs;
+}
+
+
+async function indexPocketAssets(pocketAddress) {
+    const normalizedPocket = ethers.getAddress(pocketAddress);
+    const record = pocketRegistry.getPocketRecord(normalizedPocket);
+    const fromBlock =
+        record?.createdBlock ??
+        Number(process.env.ASSET_INDEXER_FROM_BLOCK ?? 0);
+    const toBlock = "latest";
+    const pocketTopic = ethers.zeroPadValue(normalizedPocket, 32);
+    const transferTopic = ethers.id("Transfer(address,address,uint256)");
+
+    const latest = await provider.getBlockNumber();
+
+    const incoming = await getLogsChunked(
+        { topics: [transferTopic, null, pocketTopic] },
+        fromBlock,
+        latest
+    );
+
+    const outgoing = await getLogsChunked(
+        { topics: [transferTopic, pocketTopic, null] },
+        fromBlock,
+        latest
+    );
+
+
+    const tokens = new Set();
+    for (const log of incoming) tokens.add(ethers.getAddress(log.address));
+    for (const log of outgoing) tokens.add(ethers.getAddress(log.address));
+
+    return {
+        fromBlock,
+        tokens: Array.from(tokens)
+    };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Routes                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -98,15 +182,16 @@ router.post("/create", async (req, res) => {
         const pocket = await computePocketAddress(user, normalizedSalt);
 
         const tx = await controller.createPocket(user, normalizedSalt);
-        await tx.wait();
+        const receipt = await tx.wait();
 
         const isValid = await controller.validPocket(pocket);
         if (!isValid) {
             throw new Error("Pocket creation transaction succeeded but controller did not mark pocket valid");
         }
 
-        pocketRegistry.addPocket(user, pocket);
-        res.json({ pocket });
+        const createdBlock = await findPocketDeployedBlock(receipt, pocket);
+        pocketRegistry.addPocket(user, pocket, createdBlock);
+        res.json({ pocket, createdBlock });
     } catch (err) {
         console.error("[POST /api/pocket/create] failed", {
             user: req.body?.user,
@@ -173,31 +258,13 @@ router.get("/:address/assets", async (req, res) => {
         }
 
         const normalizedPocket = ethers.getAddress(address);
-        const pocketTopic = ethers.zeroPadValue(normalizedPocket, 32);
-        const transferTopic = ethers.id("Transfer(address,address,uint256)");
-        const fromBlock = Number(process.env.ASSET_INDEXER_FROM_BLOCK ?? 0);
-        const toBlock = "latest";
-
-        const [incomingLogs, outgoingLogs, nativeBalance] = await Promise.all([
-            provider.getLogs({
-                fromBlock,
-                toBlock,
-                topics: [transferTopic, null, pocketTopic]
-            }),
-            provider.getLogs({
-                fromBlock,
-                toBlock,
-                topics: [transferTopic, pocketTopic, null]
-            }),
+        const [{ fromBlock, tokens }, nativeBalance] = await Promise.all([
+            indexPocketAssets(normalizedPocket),
             provider.getBalance(normalizedPocket)
         ]);
 
-        const tokenAddresses = new Set();
-        for (const log of incomingLogs) tokenAddresses.add(ethers.getAddress(log.address));
-        for (const log of outgoingLogs) tokenAddresses.add(ethers.getAddress(log.address));
-
         const assets = [];
-        for (const tokenAddress of tokenAddresses) {
+        for (const tokenAddress of tokens) {
             try {
                 const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, provider);
 
@@ -225,6 +292,7 @@ router.get("/:address/assets", async (req, res) => {
 
         res.json({
             pocket: normalizedPocket,
+            fromBlock,
             nativeBalance: nativeBalance.toString(),
             formattedNativeBalance: ethers.formatEther(nativeBalance),
             assets
@@ -453,27 +521,27 @@ router.post("/gas", async (req, res) => {
  * POST /api/relay/pocket-exec
  */
 router.post("/api/relay/pocket-exec", async (req, res) => {
-  try {
-    const { pocket, target, data, nonce, expiry, signature } = req.body;
-    const valid = await controller.validPocket(pocket);
-if (!valid) {
-  return res.status(400).json({ error: "Invalid pocket" });
-}
+    try {
+        const { pocket, target, data, nonce, expiry, signature } = req.body;
+        const valid = await controller.validPocket(pocket);
+        if (!valid) {
+            return res.status(400).json({ error: "Invalid pocket" });
+        }
 
-    const tx = await controller.executeFromPocket(
-      pocket,
-      target,
-      data,
-      nonce,
-      expiry,
-      signature
-    );
+        const tx = await controller.executeFromPocket(
+            pocket,
+            target,
+            data,
+            nonce,
+            expiry,
+            signature
+        );
 
-    const receipt = await tx.wait();
-    res.json({ txHash: receipt.hash });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+        const receipt = await tx.wait();
+        res.json({ txHash: receipt.hash });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 export default router;
