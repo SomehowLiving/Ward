@@ -4,6 +4,7 @@ import { useAccount, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import {
   getPocket,
+  getPocketNextNonce,
   signExecIntent,
   executePocket,
   simulateExecution,
@@ -108,8 +109,12 @@ export default function ExecuteWizard() {
   const fetchPocket = async () => {
     if (!pocketAddress) return;
     try {
-      const p = await getPocket(pocketAddress);
+      const [p, nextNonce] = await Promise.all([
+        getPocket(pocketAddress),
+        getPocketNextNonce(pocketAddress)
+      ]);
       setPocket(p);
+      setNonce(nextNonce);
     } catch (err: any) {
       setError(err.message);
     }
@@ -192,13 +197,16 @@ export default function ExecuteWizard() {
     }
 
     try {
+      const nextNonce = await getPocketNextNonce(pocketAddress);
+      setNonce(nextNonce);
+
       // Simulation
-      const sig = await signExecIntent(signer, pocketAddress, txInput.target, calldata, nonce, expiry, chainId);
+      const sig = await signExecIntent(signer, pocketAddress, txInput.target, calldata, nextNonce, expiry, chainId);
       const sim = await simulateExecution({
         pocket: pocketAddress,
         target: txInput.target,
         data: calldata,
-        nonce,
+        nonce: nextNonce,
         expiry,
         signature: sig,
       });
@@ -209,7 +217,7 @@ export default function ExecuteWizard() {
         pocket: pocketAddress,
         target: txInput.target,
         data: calldata,
-        nonce,
+        nonce: nextNonce,
         expiry,
         signature: sig,
       });
@@ -230,6 +238,8 @@ export default function ExecuteWizard() {
     setError(null);
 
     try {
+      const nextNonce = await getPocketNextNonce(pocketAddress);
+      setNonce(nextNonce);
 
       const signerAddr = await signer.getAddress();
     console.log("Signer address:", signerAddr);
@@ -243,7 +253,7 @@ export default function ExecuteWizard() {
         calldata = txInput.customData || '0x';
       }
 
-      const sig = await signExecIntent(signer, pocketAddress, txInput.target, calldata, nonce, expiry, chainId);
+      const sig = await signExecIntent(signer, pocketAddress, txInput.target, calldata, nextNonce, expiry, chainId);
       setSignature(sig);
       setSigning(false);
       setStep(5);

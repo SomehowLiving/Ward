@@ -22,7 +22,7 @@ const PocketABI = PocketArtifact.abi;
 const PocketBytecode = PocketArtifact?.bytecode?.object;
 const PocketFactoryABI = PocketFactoryArtifact.abi;
 
-import { decodeEthersError } from "../utils/errors.js";
+import { decodeEthersError, parseRevertReason } from "../utils/errors.js";
 import { requireAddress, ValidationError } from "../utils/validate.js";
 import { fetchRiskTier } from "../utils/risk.js";
 import { pocketRegistry } from "../utils/pocketRegistry.js";
@@ -36,6 +36,14 @@ const router = express.Router();
 
 function getPocket(address) {
     return new ethers.Contract(address, PocketABI, provider);
+}
+
+async function getNextAvailableNonce(pocketContract, maxProbe = 2048) {
+    for (let nonce = 1; nonce <= maxProbe; nonce += 1) {
+        const used = await pocketContract.usedNonces(nonce);
+        if (!used) return nonce;
+    }
+    throw new Error(`No available nonce found within probe window (1..${maxProbe})`);
 }
 
 async function computePocketAddress(user, salt) {
@@ -84,6 +92,40 @@ const ERC20_MIN_ABI = [
     "function decimals() view returns (uint8)",
     "function balanceOf(address) view returns (uint256)"
 ];
+const ERC20_AMOUNT_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)"
+];
+
+async function resolveTokenAmount(tokenAddress, amountInput) {
+    const value = String(amountInput ?? "").trim();
+    if (!value) throw new ValidationError("amount is required");
+    const token = new ethers.Contract(tokenAddress, ERC20_AMOUNT_ABI, provider);
+
+    let decimals;
+    try {
+        decimals = Number(await token.decimals());
+    } catch {
+        throw new ValidationError("Token does not expose decimals()");
+    }
+
+    if (!Number.isFinite(decimals) || decimals < 0 || decimals > 255) {
+        throw new ValidationError("Invalid token decimals");
+    }
+
+    try {
+        const amountBaseUnits = ethers.parseUnits(value, decimals);
+        const symbol = await token.symbol().catch(() => "TOKEN");
+        return {
+            decimals,
+            symbol,
+            amountHuman: value,
+            amountBaseUnits
+        };
+    } catch {
+        throw new ValidationError(`Invalid token amount for ${decimals} decimals`);
+    }
+}
 
 async function findPocketDeployedBlock(receipt, expectedPocket) {
     const expected = ethers.getAddress(expectedPocket);
@@ -225,6 +267,33 @@ router.post("/backfill-created-blocks", async (req, res) => {
 });
 
 /**
+ * Get next available nonce for a pocket
+ * GET /api/pocket/:address/next-nonce
+ */
+router.get("/:address/next-nonce", async (req, res) => {
+    try {
+        const { address } = req.params;
+        requireAddress(address, "pocket");
+        const code = await provider.getCode(address);
+        if (code === "0x") {
+            return res.status(404).json({
+                error: { type: "NOT_FOUND", message: "Pocket contract not found" }
+            });
+        }
+
+        const pocket = getPocket(address);
+        const nextNonce = await getNextAvailableNonce(pocket);
+
+        res.json({ address: ethers.getAddress(address), nextNonce });
+    } catch (err) {
+        const status = isValidationError(err) ? 400 : 500;
+        res.status(status).json({
+            error: err?.message || "Failed to resolve next nonce"
+        });
+    }
+});
+
+/**
  * Get pocket state
  * GET /api/pocket/:address
  */
@@ -293,20 +362,21 @@ router.get("/:address/assets", async (req, res) => {
                     token.balanceOf(normalizedPocket)
                 ]);
 
-                if (balanceRaw === 0n) continue;
-
                 assets.push({
                     address: tokenAddress,
                     name,
                     symbol,
                     decimals: Number(decimals),
                     balance: balanceRaw.toString(),
-                    formattedBalance: ethers.formatUnits(balanceRaw, Number(decimals))
+                    formattedBalance: ethers.formatUnits(balanceRaw, Number(decimals)),
+                    hasBalance: balanceRaw > 0n
                 });
             } catch {
                 // Ignore contracts that don't behave like ERC20s.
             }
         }
+
+        assets.sort((a, b) => Number(b.hasBalance) - Number(a.hasBalance));
 
         res.json({
             pocket: normalizedPocket,
@@ -420,14 +490,36 @@ router.post("/sweep", async (req, res) => {
         requireAddress(pocketAddress, "pocket");
         requireAddress(tokenAddress, "token");
         requireAddress(receiverAddress, "receiver");
+        const { amountBaseUnits } = await resolveTokenAmount(tokenAddress, amount);
+
+        const valid = await controller.validPocket(pocketAddress);
+        if (!valid) {
+            return res.status(400).json({
+                error: { type: "VALIDATION", message: "Invalid pocket" }
+            });
+        }
 
         const { tier } = await fetchRiskTier(tokenAddress);
+
+        try {
+            await controller.sweep.staticCall(
+                pocketAddress,
+                tokenAddress,
+                receiverAddress,
+                amountBaseUnits,
+                tier
+            );
+        } catch (err) {
+            return res.status(400).json({
+                error: parseRevertReason(err, controller.interface)
+            });
+        }
 
         const tx = await controller.sweep(
             pocketAddress,
             tokenAddress,
             receiverAddress,
-            amount,
+            amountBaseUnits,
             tier
         );
 
@@ -435,7 +527,7 @@ router.post("/sweep", async (req, res) => {
         res.json({ txHash: receipt.hash });
     } catch (err) {
         res.status(400).json({
-            error: decodeEthersError(err, controller.interface)
+            error: parseRevertReason(err, controller.interface)
         });
     }
 });
@@ -482,23 +574,37 @@ router.post("/fee", async (req, res) => {
     try {
         const { amount, tokenAddress } = req.body;
 
-        if (!amount || !ethers.isAddress(tokenAddress)) {
-            return res.status(400).json({ error: "Invalid input" });
+        if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
+            return res.status(400).json({
+                error: { type: "VALIDATION", message: "Invalid token address" }
+            });
         }
+        const { decimals, symbol, amountHuman, amountBaseUnits } = await resolveTokenAmount(tokenAddress, amount);
 
         const { tier } = await fetchRiskTier(tokenAddress);
         const feeBps = await controller.feeBps(tier);
 
-        const fee = (BigInt(amount) * BigInt(feeBps)) / 10_000n;
+        const fee = (amountBaseUnits * BigInt(feeBps)) / 10_000n;
+        const net = amountBaseUnits - fee;
 
         res.json({
-            amount,
+            amount: amountBaseUnits.toString(),
+            amountHuman,
+            symbol,
+            decimals,
             tier,
             fee: fee.toString(),
-            net: (BigInt(amount) - fee).toString()
+            feeFormatted: ethers.formatUnits(fee, decimals),
+            net: net.toString(),
+            netFormatted: ethers.formatUnits(net, decimals)
         });
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        const status = isValidationError(err) ? 400 : 500;
+        res.status(status).json({
+            error: isValidationError(err)
+                ? { type: "VALIDATION", message: err.message }
+                : decodeEthersError(err, controller.interface)
+        });
     }
 });
 

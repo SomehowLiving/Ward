@@ -4,6 +4,7 @@ import { useAccount, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import { 
   getPocket, 
+  getPocketNextNonce,
   getPocketAssets,
   getControllerPocket,
   signBurnIntent,
@@ -33,7 +34,7 @@ export default function PocketDetail() {
   const [error, setError] = useState<string | null>(null);
   const [burning, setBurning] = useState(false);
   const [sweepForm, setSweepForm] = useState({ token: '', receiver: '', amount: '' });
-  const [sweepFee, setSweepFee] = useState<{ tier: number; fee: string; net: string } | null>(null);
+  const [sweepFee, setSweepFee] = useState<{ tier: number; feeFormatted: string; netFormatted: string; symbol: string } | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [nativeBalance, setNativeBalance] = useState<string>('0');
   const [assets, setAssets] = useState<PocketAsset[]>([]);
@@ -73,31 +74,36 @@ export default function PocketDetail() {
       setLoading(false);
     }
   };
-  const fetchAssets = async () => {
-    if (!pocketAddress) return;
-    setAssetsLoading(true);
-    try {
-      const response = await getPocketAssets(pocketAddress);
-      setNativeBalance(response.formattedNativeBalance);
-      setAssets(response.assets);
-    } catch (err) {
-      console.error('Asset indexing failed', err);
-      setNativeBalance('0');
-      setAssets([]);
-    } finally {
-      setAssetsLoading(false);
-    }
-  };
+const fetchAssets = async () => {
+  if (!pocketAddress) return;
+
+  setAssetsLoading(true);
+
+  try {
+    const response = await getPocketAssets(pocketAddress);
+
+    // update only if fetch succeeded
+    setNativeBalance(response.formattedNativeBalance);
+    setAssets(response.assets);
+
+  } catch (err) {
+    console.error('Asset indexing failed', err);
+    // keep previous values — do NOT overwrite with 0
+  } finally {
+    setAssetsLoading(false);
+  }
+};
+
 
 
   const handleBurn = async () => {
-    if (!signer || !pocketAddress || pocket?.used || pocket?.burned) return;
+    if (!signer || !pocketAddress || pocket?.burned) return;
     if (!confirm('Are you sure you want to burn this pocket? This cannot be undone.')) return;
     
     setBurning(true);
     setError(null);
     try {
-      const nonce = 1;
+      const nonce = await getPocketNextNonce(pocketAddress);
       const expiry = Math.floor(Date.now() / 1000) + 3600;
       const signature = await signBurnIntent(signer, pocketAddress, nonce, expiry, chainId);
       await burnPocket({ pocket: pocketAddress, nonce, expiry, signature });
@@ -111,10 +117,17 @@ export default function PocketDetail() {
   const handleSweepFee = async () => {
     if (!sweepForm.token || !sweepForm.amount) return;
     try {
+      setError(null);
       const fee = await calculateFee(sweepForm.amount, sweepForm.token);
-      setSweepFee({ tier: fee.tier, fee: fee.fee, net: fee.net });
-    } catch (err) {
-      console.error('Fee calculation failed', err);
+      setSweepFee({
+        tier: fee.tier,
+        feeFormatted: fee.feeFormatted,
+        netFormatted: fee.netFormatted,
+        symbol: fee.symbol
+      });
+    } catch (err: any) {
+      setSweepFee(null);
+      setError(err.message || 'Fee calculation failed');
     }
   };
 
@@ -158,7 +171,9 @@ export default function PocketDetail() {
     return <div style={{ padding: '2rem', textAlign: 'center' }}>Pocket not found</div>;
   }
 
-  const disabled = pocket.used || pocket.burned;
+  const executeDisabled = pocket.used || pocket.burned;
+  const sweepDisabled = pocket.burned;
+  const burnDisabled = pocket.burned;
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
@@ -221,7 +236,9 @@ export default function PocketDetail() {
                   <tr key={asset.address}>
                     <td style={{ padding: '0.5rem 0.25rem' }}>{asset.name}</td>
                     <td style={{ padding: '0.5rem 0.25rem' }}>{asset.symbol}</td>
-                    <td style={{ padding: '0.5rem 0.25rem', textAlign: 'right' }}>{asset.formattedBalance}</td>
+                    <td style={{ padding: '0.5rem 0.25rem', textAlign: 'right', color: asset.hasBalance ? '#111' : '#777' }}>
+                      {asset.formattedBalance}
+                    </td>
                     <td style={{ padding: '0.5rem 0.25rem', fontFamily: 'monospace' }}>
                       {asset.address.slice(0, 8)}...{asset.address.slice(-6)}
                     </td>
@@ -242,8 +259,8 @@ export default function PocketDetail() {
             Execute a protected transaction from this pocket
           </p>
           <Link to={`/pocket/${pocket.address}/execute`}>
-            <button disabled={disabled}>
-              {disabled ? 'Pocket Used/Burned' : 'Execute Transaction'}
+            <button disabled={executeDisabled}>
+              {executeDisabled ? 'Pocket Used/Burned' : 'Execute Transaction'}
             </button>
           </Link>
         </div>       
@@ -257,39 +274,39 @@ export default function PocketDetail() {
               placeholder="Token Address (0x...)"
               value={sweepForm.token}
               onChange={(e) => setSweepForm({ ...sweepForm, token: e.target.value })}
-              disabled={disabled}
+              disabled={sweepDisabled}
             />
             <input
               type="text"
               placeholder="Receiver Address (0x...)"
               value={sweepForm.receiver}
               onChange={(e) => setSweepForm({ ...sweepForm, receiver: e.target.value })}
-              disabled={disabled}
+              disabled={sweepDisabled}
             />
             <input
               type="text"
-              placeholder="Amount (wei)"
+              placeholder="Amount (token units, e.g. 500.5)"
               value={sweepForm.amount}
               onChange={(e) => setSweepForm({ ...sweepForm, amount: e.target.value })}
-              disabled={disabled}
+              disabled={sweepDisabled}
             />
             {!sweepFee && (
-              <button onClick={handleSweepFee} disabled={disabled || !sweepForm.token || !sweepForm.amount}>
+              <button onClick={handleSweepFee} disabled={sweepDisabled || !sweepForm.token || !sweepForm.amount}>
                 Calculate Fee
               </button>
             )}
           </div>
           {sweepFee && (
             <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#f9f9f9', borderRadius: '4px' }}>
-              <div>Fee: {ethers.formatEther(sweepFee.fee)} ETH</div>
-              <div>Net: {ethers.formatEther(sweepFee.net)} ETH</div>
+              <div>Fee: {sweepFee.feeFormatted} {sweepFee.symbol}</div>
+              <div>Net: {sweepFee.netFormatted} {sweepFee.symbol}</div>
               <div>Risk Tier: {sweepFee.tier}</div>
             </div>
           )}
           {sweepFee && (
             <button 
               onClick={handleSweep} 
-              disabled={disabled || sweeping}
+              disabled={sweepDisabled || sweeping}
             >
               {sweeping ? 'Sweeping...' : 'Sweep'}
             </button>
@@ -304,7 +321,7 @@ export default function PocketDetail() {
           </p>
           <button 
             onClick={handleBurn} 
-            disabled={disabled || burning}
+            disabled={burnDisabled || burning}
             style={{ background: '#dc3545', color: 'white' }}
           >
             {burning ? 'Burning...' : 'Burn Pocket'}

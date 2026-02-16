@@ -3,6 +3,7 @@ export const API = {
     create: "/api/pocket/create",
     get: (address: string) => `/api/pocket/${address}`,
     assets: (address: string) => `/api/pocket/${address}/assets`,
+    nextNonce: (address: string) => `/api/pocket/${address}/next-nonce`,
     exec: "/api/pocket/exec",
     burn: "/api/pocket/burn",
     sweep: "/api/pocket/sweep",

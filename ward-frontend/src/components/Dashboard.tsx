@@ -62,7 +62,7 @@ export default function Dashboard() {
   if (!isConnected) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem', textAlign: 'center' }}>
-        <h1 style={{ marginBottom: '2rem' }}>PocketGuard</h1>
+        <h1 style={{ marginBottom: '2rem' }}>Ward</h1>
         <p style={{ marginBottom: '2rem', color: '#666' }}>
           Transaction protection using single-use execution vaults
         </p>
@@ -74,7 +74,7 @@ export default function Dashboard() {
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1>PocketGuard</h1>
+        <h1>Ward</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <span style={{ fontSize: '0.9rem', color: '#666' }}>
             {address?.slice(0, 6)}...{address?.slice(-4)}
@@ -95,41 +95,48 @@ export default function Dashboard() {
       </section>
 
       <section>
-        <h2 style={{ marginBottom: '1rem' }}>Your Pockets</h2>
-        {pockets.length === 0 ? (
-          <p style={{ color: '#666' }}>No pockets yet. Create one to get started.</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {pockets.map((pocket) => (
-              <li 
-                key={pocket.address}
-                style={{ 
-                  border: '1px solid #ddd', 
-                  borderRadius: '8px', 
-                  padding: '1rem', 
-                  marginBottom: '0.75rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div>
-                  <code style={{ fontSize: '0.9rem' }}>{pocket.address}</code>
-                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
-                    Status: {pocket.used ? '🔴 Used' : '🟢 Unused'}
-                  </div>
-                </div>
-                <button 
-                  onClick={() => navigate(`/pocket/${pocket.address}`)}
-                  disabled={pocket.used}
-                >
-                  {pocket.used ? 'Used' : 'Open'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+  <h2 style={{ marginBottom: '1rem' }}>Your Pockets</h2>
+  {pockets.length === 0 ? (
+    <p style={{ color: '#666' }}>No pockets yet. Create one to get started.</p>
+  ) : (
+    <ul style={{ listStyle: 'none', padding: 0 }}>
+      {pockets.map((pocket) => (
+        <li
+          key={pocket.address}
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '0.75rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <code style={{ fontSize: '0.9rem' }}>{pocket.address}</code>
+            <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
+              Status:{' '}
+              {pocket.burned
+                ? '⚫ Burned'
+                : pocket.used
+                ? '🟠 Used'
+                : '🟢 Active'}
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate(`/pocket/${pocket.address}`)}
+            disabled={pocket.burned}
+          >
+            {pocket.burned ? 'Burned' : 'Open'}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )}
+</section>
+
     </div>
   );
 }

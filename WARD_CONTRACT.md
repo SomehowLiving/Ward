@@ -1,4 +1,4 @@
-# PocketGuard — End-to-End Flow
+# Ward — End-to-End Flow
 
 This system has **three roles**:
 
@@ -262,6 +262,6 @@ Your contracts enforce:
 
 ---
 
-> PocketGuard routes risky on-chain interactions through disposable smart wallets created on demand. Users sign a one-time intent authorizing a specific call, the controller executes it from an isolated pocket, and the pocket is destroyed afterward. If the interaction is malicious, only the pocket is affected; if safe, assets are swept back with enforced fees. The main wallet never touches untrusted contracts.
+> Ward routes risky on-chain interactions through disposable smart wallets created on demand. Users sign a one-time intent authorizing a specific call, the controller executes it from an isolated pocket, and the pocket is destroyed afterward. If the interaction is malicious, only the pocket is affected; if safe, assets are swept back with enforced fees. The main wallet never touches untrusted contracts.
 
 ---

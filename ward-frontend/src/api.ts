@@ -3,6 +3,15 @@ import { API } from "./routes";
 
 // const BASE_URL = 'http://localhost:3001';
 
+function extractApiError(payload: any, fallback: string): string {
+    const error = payload?.error;
+    if (typeof error === 'string') return error;
+    if (typeof error?.message === 'string' && error.message.length > 0) return error.message;
+    if (typeof error?.name === 'string' && error.name.length > 0) return error.name;
+    if (typeof payload?.message === 'string' && payload.message.length > 0) return payload.message;
+    return fallback;
+}
+
 // Types
 export interface Pocket {
     address: string;
@@ -67,6 +76,7 @@ export interface PocketAsset {
     decimals: number;
     balance: string;
     formattedBalance: string;
+    hasBalance?: boolean;
 }
 
 export interface PocketAssetsResponse {
@@ -100,6 +110,13 @@ export async function getPocket(address: string): Promise<Pocket> {
     const res = await fetch(API.pocket.get(address));
     if (!res.ok) throw new Error('Failed to get pocket');
     return res.json();
+}
+
+export async function getPocketNextNonce(address: string): Promise<number> {
+    const res = await fetch(API.pocket.nextNonce(address));
+    if (!res.ok) throw new Error('Failed to get pocket next nonce');
+    const body = await res.json();
+    return Number(body.nextNonce);
 }
 
 export async function getPocketAssets(address: string): Promise<PocketAssetsResponse> {
@@ -153,8 +170,8 @@ export async function sweepPocket(params: SweepParams): Promise<{ txHash: string
         body: JSON.stringify(params),
     });
     if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || 'Sweep failed');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(extractApiError(err, 'Sweep failed'));
     }
     return res.json();
 }
@@ -178,13 +195,26 @@ export async function estimateGas(params: ExecuteParams): Promise<{ gas: string 
     return res.json();
 }
 
-export async function calculateFee(amount: string, tokenAddress: string): Promise<{ amount: string; tier: number; fee: string; net: string }> {
+export async function calculateFee(amount: string, tokenAddress: string): Promise<{
+    amount: string;
+    amountHuman: string;
+    symbol: string;
+    decimals: number;
+    tier: number;
+    fee: string;
+    feeFormatted: string;
+    net: string;
+    netFormatted: string;
+}> {
     const res = await fetch(API.pocket.fee, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, tokenAddress }),
     });
-    if (!res.ok) throw new Error('Fee calculation failed');
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(extractApiError(err, 'Fee calculation failed'));
+    }
     return res.json();
 }
 
